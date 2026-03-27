@@ -37,7 +37,7 @@ O ecossistema MaaS é dividido em dois planos principais para garantir performan
 
 ## 👥 Colaboradores (Core Team)
 
-* **Dyone Andrade** - *Full Stack Developer, DevOps Engineer & Engineer IA* * **Derek Cobain** - *Software Engineer*
+* **Dyone Andrade** - *Full Stack Developer, DevOps Engineer & Engineer IA* 
 
 ---
 
