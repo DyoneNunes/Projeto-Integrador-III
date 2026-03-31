@@ -1,0 +1,68 @@
+// =============================================================================
+// PROJETO MaaS (Memory as a Service) - PI-III 5º PERÍODO TADS FAESA
+// Definição do serviço gRPC para gerenciamento de memória compartilhada
+// =============================================================================
+
+syntax = "proto3";
+
+package maas;
+
+option cc_enable_arenas = true;
+
+// ----------------------------------------------------------------------------
+// Serviço principal de gerenciamento de memória
+// ----------------------------------------------------------------------------
+service MemoryService {
+    // Aloca um bloco de memória compartilhada para um tenant.
+    // Retorna a chave SHM e o offset para acesso direto via mmap.
+    rpc Allocate(AllocateRequest) returns (AllocateResponse);
+
+    // Libera um bloco de memória previamente alocado.
+    rpc Deallocate(DeallocateRequest) returns (DeallocateResponse);
+
+    // Stream de métricas de observabilidade (latência, uso, pressão).
+    // O client envia um fluxo contínuo de métricas e recebe um ACK final.
+    rpc ReportMetrics(stream MetricsReport) returns (Acknowledge);
+}
+
+// ----------------------------------------------------------------------------
+// Mensagens de Alocação
+// ----------------------------------------------------------------------------
+message AllocateRequest {
+    string tenant_id = 1;   // UUID do tenant solicitante
+    int64  size_bytes = 2;  // Tamanho em bytes do bloco requisitado
+}
+
+message AllocateResponse {
+    string allocation_id = 1;  // UUID da alocação criada
+    string shm_key       = 2;  // Chave de shared memory do Linux (/dev/shm)
+    int64  offset        = 3;  // Offset em bytes dentro da região mapeada
+}
+
+message DeallocateRequest {
+    string allocation_id = 1;
+}
+
+message DeallocateResponse {
+    bool   success = 1;
+    string message = 2;
+}
+
+// ----------------------------------------------------------------------------
+// Mensagens de Métricas
+// ----------------------------------------------------------------------------
+message MetricsReport {
+    string tenant_id     = 1;
+    string allocation_id = 2;
+    string node_id       = 3;
+    int64  timestamp_us  = 4;  // Timestamp em microsegundos (CLOCK_MONOTONIC)
+    double rtt_ms        = 5;  // Round-Trip Time em milissegundos
+    double memory_pressure    = 6;  // Pressão de memória do nó [0.0, 1.0]
+    double cache_hit_ratio    = 7;  // Taxa de acerto de cache [0.0, 1.0]
+    double net_bottleneck_score = 8;
+}
+
+message Acknowledge {
+    int64  metrics_received = 1;
+    string message          = 2;
+}

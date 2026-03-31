@@ -1,0 +1,129 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model atomicbilling {
+  billing_id           String                @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenant_id            String                @db.Uuid
+  allocation_id        String?               @db.Uuid
+  metric_id            String?               @db.Uuid
+  ts_start             DateTime              @db.Timestamptz(6)
+  ts_end               DateTime              @db.Timestamptz(6)
+  bytes_per_second     BigInt
+  billed_bytes         BigInt
+  unit_price_micros    BigInt
+  amount_micros        BigInt
+  integrity_hash       String?
+  memoryallocation     memoryallocation?     @relation(fields: [allocation_id], references: [allocation_id], onDelete: NoAction, onUpdate: NoAction)
+  observabilitymetrics observabilitymetrics? @relation(fields: [metric_id], references: [metric_id], onDelete: NoAction, onUpdate: NoAction)
+  tenant               tenant                @relation(fields: [tenant_id], references: [tenant_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([integrity_hash], map: "idx_billing_integrity")
+}
+
+model clusternode {
+  node_id               String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  hostname              String                 @unique
+  region                String
+  total_ram_bytes       BigInt
+  allocatable_ram_bytes BigInt
+  status                node_status?           @default(healthy)
+  last_heartbeat_at     DateTime?              @db.Timestamptz(6)
+  memoryallocation      memoryallocation[]
+  observabilitymetrics  observabilitymetrics[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model memoryallocation {
+  allocation_id         String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenant_id             String                 @db.Uuid
+  node_id               String                 @db.Uuid
+  shm_key               String
+  mmap_offset_bytes     BigInt
+  size_bytes            BigInt
+  isolation_cgroup_path String?
+  state                 allocation_state?      @default(provisioning)
+  created_at            DateTime?              @default(now()) @db.Timestamptz(6)
+  released_at           DateTime?              @db.Timestamptz(6)
+  atomicbilling         atomicbilling[]
+  clusternode           clusternode            @relation(fields: [node_id], references: [node_id], onDelete: NoAction, onUpdate: NoAction)
+  tenant                tenant                 @relation(fields: [tenant_id], references: [tenant_id], onDelete: NoAction, onUpdate: NoAction)
+  observabilitymetrics  observabilitymetrics[]
+
+  @@index([tenant_id], map: "idx_alloc_tenant_active", where: raw("(state = 'active'::allocation_state)"))
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model observabilitymetrics {
+  metric_id            String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenant_id            String?           @db.Uuid
+  node_id              String?           @db.Uuid
+  allocation_id        String?           @db.Uuid
+  ts                   DateTime?         @default(now()) @db.Timestamptz(6)
+  rtt_ms               Decimal?          @db.Decimal
+  cache_hit_ratio      Decimal?          @db.Decimal
+  memory_pressure      Decimal?          @db.Decimal
+  net_bottleneck_score Decimal?          @db.Decimal
+  stress_score         Decimal?          @db.Decimal
+  atomicbilling        atomicbilling[]
+  memoryallocation     memoryallocation? @relation(fields: [allocation_id], references: [allocation_id], onUpdate: NoAction)
+  clusternode          clusternode?      @relation(fields: [node_id], references: [node_id], onDelete: NoAction, onUpdate: NoAction)
+  tenant               tenant?           @relation(fields: [tenant_id], references: [tenant_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([tenant_id, ts(sort: Desc)], map: "idx_metrics_tenant_ts")
+}
+
+model tenant {
+  tenant_id            String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name                 String
+  plan                 String
+  status               tenant_status?         @default(active)
+  created_at           DateTime?              @default(now()) @db.Timestamptz(6)
+  api_key              String?                @unique
+  atomicbilling        atomicbilling[]
+  memoryallocation     memoryallocation[]
+  observabilitymetrics observabilitymetrics[]
+  tenantquota          tenantquota[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model tenantquota {
+  quota_id        String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenant_id       String    @db.Uuid
+  ram_bytes_limit BigInt
+  max_allocations Int
+  max_nodes       Int
+  effective_from  DateTime  @db.Timestamptz(6)
+  effective_to    DateTime? @db.Timestamptz(6)
+  tenant          tenant    @relation(fields: [tenant_id], references: [tenant_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenant_id, effective_from], map: "unique_tenant_period")
+}
+
+enum allocation_state {
+  provisioning
+  active
+  releasing
+  released
+  failed
+}
+
+enum node_status {
+  healthy
+  degraded
+  offline
+  maintenance
+}
+
+enum tenant_status {
+  active
+  suspended
+  closed
+}

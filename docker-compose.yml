@@ -1,0 +1,74 @@
+# =============================================================================
+# PROJETO MaaS (Memory as a Service) - Orquestração de serviços
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — Banco de dados para persistência de alocações e métricas
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    shm_size: "256mb"
+
+  # ---------------------------------------------------------------------------
+  # MaaS Core — Servidor C++ gRPC com gerenciamento de memória via mmap
+  # ---------------------------------------------------------------------------
+  maas-core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host
+    ports:
+      - "50051:50051"
+    environment:
+      MAAS_GRPC_ADDR: "0.0.0.0:50051"
+      MAAS_PG_CONNINFO: "host=db port=5432 dbname=postgres user=postgres password=postgres"
+      MAAS_ARENA_SIZE: "1073741824" # 1 GiB
+    ipc: "host"
+    cap_add:
+      - SYS_ADMIN # Necessário para madvise(MADV_HUGEPAGE) e cgroups
+      - IPC_LOCK # Necessário para mlock() — travar páginas em RAM
+    depends_on:
+      db:
+        condition: service_healthy
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  # ---------------------------------------------------------------------------
+  # Dashboard — Next.js observability panel
+  # ---------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3000"
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgres@db:5432/postgres"
+      MAAS_CORE_HOST: "maas-core:50051"
+    volumes:
+      - ./proto:/app/proto:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      maas-core:
+        condition: service_started
+
+volumes:
+  pgdata:
