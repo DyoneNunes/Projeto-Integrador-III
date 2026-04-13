@@ -4,7 +4,8 @@ O Memory as a Service (MaaS) não é um banco de dados comum; é uma extensão d
 1. O Contrato (Solicitação)
 Ninguém acessa a memória sem permissão. O primeiro passo é pedir um "pedaço" de RAM ao servidor MaaS.
 
-O que o usuário faz: Envia uma requisição gRPC (ou via Dashboard) dizendo: "Sou o inquilino (Tenant) X e preciso de Y megabytes".
+O que o usuário faz: Envia uma requisição gRPC (Porta 50051) ou acessa o **Dashboard** para solicitar memória:
+🌐 **Dashboard:** [http://100.114.106.28:3002/](http://100.114.106.28:3002/)
 
 O que o MaaS devolve: Uma SHM Key (ex: /maas_7f6cfca9). Guarde essa chave, ela é o seu "crachá" de acesso ao hardware.
 
@@ -24,7 +25,7 @@ Velocidade: Como o dado está na RAM, a leitura é instantânea. Se você escrev
 Para o seu manual de entrega (C2), o usuário faria algo assim no Python:
 
 Python
-# 1. Solicita (via gRPC)
+# 1. Solicita (via gRPC ou Dashboard em http://100.114.106.28:3002/)
 # "Ei MaaS, me dá 1MB?" -> Recebe "/maas_teste"
 
 # 2. Conecta (via POSIX)

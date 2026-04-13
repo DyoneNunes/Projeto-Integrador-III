@@ -23,6 +23,11 @@ service MemoryService {
     // Stream de métricas de observabilidade (latência, uso, pressão).
     // O client envia um fluxo contínuo de métricas e recebe um ACK final.
     rpc ReportMetrics(stream MetricsReport) returns (Acknowledge);
+
+    // [NOVO] Operações de I/O de Memória via Rede
+    // Permite que clientes remotos (como na nuvem) acessem a RAM física do provedor.
+    rpc WriteMemory(WriteRequest) returns (Acknowledge);
+    rpc ReadMemory(ReadRequest) returns (ReadResponse);
 }
 
 // ----------------------------------------------------------------------------
@@ -65,4 +70,23 @@ message MetricsReport {
 message Acknowledge {
     int64  metrics_received = 1;
     string message          = 2;
+}
+
+// ----------------------------------------------------------------------------
+// Mensagens de I/O Remoto
+// ----------------------------------------------------------------------------
+message WriteRequest {
+    string allocation_id = 1;
+    int64  offset        = 2;
+    bytes  data          = 3; // Payload binário (máx 4MB recomendado por gRPC)
+}
+
+message ReadRequest {
+    string allocation_id = 1;
+    int64  offset        = 2;
+    int64  size_bytes    = 3;
+}
+
+message ReadResponse {
+    bytes  data          = 1;
 }

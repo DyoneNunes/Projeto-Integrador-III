@@ -9,7 +9,8 @@ Diferente de um banco de dados (onde você salva e busca), no MaaS você anexa s
 
 🚀 2. O Fluxo de Utilização (3 Passos)
 Passo A: Solicitação (Handshake)
-O seu aplicativo pede permissão para usar a memória. Isso é feito via gRPC (Porta 50051).
+O seu aplicativo pede permissão para usar a memória. Isso é feito via gRPC (Porta 50051) ou via Dashboard:
+🌐 **Dashboard:** [http://100.114.106.28:3002/](http://100.114.106.28:3002/)
 
 Entrada: tenant_id e size_bytes.
 
@@ -33,7 +34,7 @@ import posix_ipc
 import maas_pb2, maas_pb2_grpc
 
 # 1. SOLICITAR (Via gRPC)
-channel = grpc.insecure_channel('localhost:50051')
+channel = grpc.insecure_channel('100.114.106.28:50051')
 stub = maas_pb2_grpc.MemoryServiceStub(channel)
 
 request = maas_pb2.AllocateRequest(tenant_id="Quilombus_App", size_bytes=1048576) # 1MB

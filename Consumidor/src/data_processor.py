@@ -1,14 +1,22 @@
 import os
 import time
 import struct
-import mmap
-import posix_ipc
+import grpc
 import psycopg2
+import sys
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# Importa stubs gRPC
+sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+import maas_pb2
+import maas_pb2_grpc
+from maas_client import MaaSMemory
+
+# Configurações de Rede e Banco
 MAAS_BUFFER_SIZE = int(os.getenv("MAAS_BUFFER_SIZE", 10485760))
+MAAS_GRPC_HOST = os.getenv("MAAS_GRPC_HOST", "100.114.106.28:50051")
 DB_CONNECTION = os.getenv("DB_CONNECTION")
 
 # Struct de 32 bytes: Latitude (double), Longitude (double), Temperatura (double), Confiança (int), ID (int)
@@ -17,15 +25,14 @@ RECORD_SIZE = struct.calcsize(STRUCT_FORMAT)
 
 # Thresholds para Análise de Dados / Insight
 TEMP_ANOMALY_THRESHOLD = 330.0 # Kelvin (aprox 57ºC de emissão radiativa - foco vivo)
-CONFIDENCE_THRESHOLD = 80 # Apenas alta confiança (evita falsos positivos de reflexos solares)
+CONFIDENCE_THRESHOLD = 80 # Apenas alta confiança (evita falsos positivos)
 
 # Caminho do arquivo de metadados escrito pelo ingestor
 META_FILE = "/dev/shm/maas_shm_info.txt"
 
-def get_shm_name_from_meta() -> tuple[str, int]:
+def get_meta_info() -> tuple[str, str, int]:
     """
-    Lê o nome da SHM e o tamanho a partir do arquivo de metadados
-    escritos pelo ingestor após o handshake com o MaaS.
+    Lê o nome da SHM, allocation_id e o tamanho a partir do arquivo de metadados.
     """
     print("[*] Aguardando metadados do Ingestor (handshake MaaS)...")
     while True:
@@ -35,16 +42,17 @@ def get_shm_name_from_meta() -> tuple[str, int]:
                     lines = f.read().strip().split("\n")
                 if len(lines) >= 3:
                     shm_name = lines[0]
+                    alloc_id = lines[1]
                     size = int(lines[2])
-                    print(f"[+] Metadados recebidos: shm_name={shm_name}, size={size}")
-                    return shm_name, size
+                    print(f"[+] Metadados recebidos: alloc_id={alloc_id}, size={size}")
+                    return shm_name, alloc_id, size
             except Exception as e:
                 print(f"[-] Erro ao ler metadados: {e}")
         time.sleep(2)
 
 def get_db_connection():
     """
-    Tenta conectar ao banco de dados com múltiplas retentativas para suportar o tempo de subida do Docker DNS.
+    Tenta conectar ao banco de dados com múltiplas retentativas.
     """
     retries = 5
     while retries > 0:
@@ -58,38 +66,23 @@ def get_db_connection():
             time.sleep(3)
     return None
 
-def get_shared_memory(shm_name: str, size: int) -> mmap.mmap:
+def get_remote_memory(stub, alloc_id: str, size: int) -> MaaSMemory:
     """
-    Acessa a memória em RAM criada pelo MaaS Core e populada pelo Módulo Ingestor.
-    Modo ACCESS_READ para evitar concorrência de escrita.
+    Inicializa a abstração de memória via rede.
     """
-    try:
-        # Abre a memória sem a flag O_CREAT (deve existir)
-        memory = posix_ipc.SharedMemory(shm_name)
-        map_file = mmap.mmap(memory.fd, memory.size, access=mmap.ACCESS_READ)
-        memory.close_fd()
-        return map_file
-    except posix_ipc.ExistentialError:
-        return None
-    except Exception as e:
-        print(f"[-] Erro fatal de memória POSIX: {e}")
-        return None
+    return MaaSMemory(stub, alloc_id, size)
 
 def process_data():
     conn = get_db_connection()
     
-    # Lê o SHM name dinâmico dos metadados escritos pelo ingestor
-    shm_name, buffer_size = get_shm_name_from_meta()
+    # Lê metadados dinâmicos
+    shm_name, alloc_id, buffer_size = get_meta_info()
     
-    mm = None
-    # Aguarda o ingestor criar o bloco via MaaS
-    while mm is None:
-        mm = get_shared_memory(shm_name, buffer_size)
-        if mm is None:
-            print("[*] Aguardando alocação da RAM pelo Ingestor (MaaS)...")
-            time.sleep(2)
+    channel = grpc.insecure_channel(MAAS_GRPC_HOST)
+    stub = maas_pb2_grpc.MemoryServiceStub(channel)
+    mm = get_remote_memory(stub, alloc_id, buffer_size)
             
-    print("[+] Conectado ao MaaS Buffer. Iniciando Motor Analítico (Latência Zero)...")
+    print("[+] Conectado ao MaaS Buffer via REDE. Iniciando Motor Analítico...")
     
     last_offset = 0
     processed_ids = set() # Evita processar a mesma leitura mais de uma vez
@@ -101,7 +94,7 @@ def process_data():
             
             # Validação de bloco (sem dados novos na posição)
             if not raw_data or len(raw_data) < RECORD_SIZE or raw_data == b'\x00' * RECORD_SIZE:
-                time.sleep(1) # Aguarda o Ingestor gravar mais dados
+                time.sleep(1) 
                 continue
 
             # Deserialização rápida em C-struct -> Python Tuple
@@ -111,7 +104,7 @@ def process_data():
             last_offset += RECORD_SIZE
             if last_offset >= buffer_size:
                 last_offset = 0
-                processed_ids.clear() # Limpa histórico para nova rotação
+                processed_ids.clear() 
                 
             if record_id == 0 or record_id in processed_ids:
                 continue
@@ -122,10 +115,8 @@ def process_data():
             if conf >= CONFIDENCE_THRESHOLD and temp >= TEMP_ANOMALY_THRESHOLD:
                 print(f"[!] INSIGHT: Anomalia Térmica Detectada! Lat {lat:.4f}, Lon {lon:.4f}, Temp {temp}K, Conf {conf}%")
                 
-                # Persistência Inteligente (Salvar no banco relacional apenas o insight crítico)
                 if conn and not conn.closed:
                     with conn.cursor() as cursor:
-                        # 1. Salvar leitura filtrada
                         cursor.execute("""
                             INSERT INTO sentinela_ambiental.sensor_readings 
                             (sensor_id, latitude, longitude, temperature_k, confidence)
@@ -134,11 +125,10 @@ def process_data():
                         
                         reading_id = cursor.fetchone()[0]
                         
-                        # 2. Gerar alerta
                         cursor.execute("""
                             INSERT INTO sentinela_ambiental.alerts_history 
                             (reading_id, alert_type, severity, description)
-                            VALUES (%s, 'THERMAL_ANOMALY', 'CRITICAL', 'Foco de incêndio detectado em tempo real via MaaS.');
+                            VALUES (%s, 'THERMAL_ANOMALY', 'CRITICAL', 'Foco detectado em tempo real via MaaS Network.');
                         """, (reading_id,))
                         
                     conn.commit()
@@ -148,14 +138,10 @@ def process_data():
 
         except Exception as e:
             print(f"[-] Erro de processamento ou o Buffer foi destruído: {e}")
-            time.sleep(3)
-            # Tentativa de recuperação: relê metadados e reconecta à SHM
-            mm = None
-            shm_name, buffer_size = get_shm_name_from_meta()
-            while mm is None:
-                mm = get_shared_memory(shm_name, buffer_size)
-                if mm is None:
-                    time.sleep(2)
+            time.sleep(5)
+            # Tentativa de recuperação
+            shm_name, alloc_id, buffer_size = get_meta_info()
+            mm = get_remote_memory(stub, alloc_id, buffer_size)
             last_offset = 0
 
 if __name__ == "__main__":

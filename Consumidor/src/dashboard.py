@@ -6,11 +6,19 @@ import folium
 from streamlit_folium import st_folium
 from datetime import datetime, timedelta
 import requests
-import mmap
-import posix_ipc
 import struct
+import grpc
+import sys
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
+
+load_dotenv()
+
+# Importa stubs gRPC
+sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+import maas_pb2
+import maas_pb2_grpc
+from maas_client import MaaSMemory
 
 # 1. CONFIGURAÇÃO DA PÁGINA E ESTILO
 st.set_page_config(
@@ -23,14 +31,11 @@ st.set_page_config(
 # Estilo CSS customizado para o tema "Sentinela"
 st.markdown("""
     <style>
-    /* Removendo background-color fixo para respeitar o tema Claro/Escuro do Streamlit */
     .stMetric { padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
     </style>
     """, unsafe_allow_html=True)
 
 # 2. CARREGAMENTO DE AMBIENTE E CONEXÃO
-load_dotenv()
-
 DB_CONNECTION = os.getenv("DB_CONNECTION")
 
 @st.cache_resource
@@ -38,16 +43,21 @@ def get_engine():
     """Retorna o engine de conexão com o banco via SQLAlchemy."""
     return create_engine(DB_CONNECTION)
 
-# 2.2 INTEGRAÇÃO MAAS (SISTEMA DE MEMÓRIA GERENCIADA)
+# 2.2 INTEGRAÇÃO MAAS (MODO REDE GRP)
 STRUCT_FORMAT = '=dddii'
 RECORD_SIZE = struct.calcsize(STRUCT_FORMAT)
 META_FILE = "/dev/shm/maas_shm_info.txt"
+MAAS_GRPC_HOST = os.getenv("MAAS_GRPC_HOST", "100.114.106.28:50051")
+
+@st.cache_resource
+def get_maas_stub():
+    channel = grpc.insecure_channel(MAAS_GRPC_HOST)
+    return maas_pb2_grpc.MemoryServiceStub(channel)
 
 @st.cache_data(ttl=30)
 def get_maas_live_data() -> pd.DataFrame:
     """
-    Lê os dados de tempo real diretamente da RAM alocada via MaaS.
-    Isso economiza recursos do servidor local (Stateless Client).
+    Lê os dados de tempo real via Rede (gRPC) da RAM alocada via MaaS.
     """
     if not os.path.exists(META_FILE):
         return pd.DataFrame()
@@ -57,41 +67,39 @@ def get_maas_live_data() -> pd.DataFrame:
             lines = f.read().strip().split("\n")
         if len(lines) < 3: return pd.DataFrame()
         
-        shm_name = lines[0]
+        alloc_id = lines[1]
         size = int(lines[2])
         
-        memory = posix_ipc.SharedMemory(shm_name)
-        with mmap.mmap(memory.fd, memory.size, access=mmap.ACCESS_READ) as mm:
-            data = []
-            # Lemos apenas os últimos 500 registros para otimizar a renderização do mapa
-            # O buffer circular pode ter milhares, mas para visualização 'Live' focamos no topo
-            total_records = size // RECORD_SIZE
-            records_to_read = min(500, total_records)
+        stub = get_maas_stub()
+        mm = MaaSMemory(stub, alloc_id, size)
+        
+        data = []
+        # Lemos os últimos 500 registros para o Live Map
+        total_records = size // RECORD_SIZE
+        records_to_read = min(500, total_records)
+        
+        for i in range(records_to_read):
+            mm.seek(i * RECORD_SIZE)
+            chunk = mm.read(RECORD_SIZE)
+            if not chunk or chunk == b'\x00' * RECORD_SIZE:
+                continue
             
-            for i in range(records_to_read):
-                mm.seek(i * RECORD_SIZE)
-                chunk = mm.read(RECORD_SIZE)
-                if not chunk or chunk == b'\x00' * RECORD_SIZE:
-                    continue
-                
-                lat, lon, temp_k, conf, rec_id = struct.unpack(STRUCT_FORMAT, chunk)
-                if rec_id == 0: continue
-                
-                data.append({
-                    'latitude': lat,
-                    'longitude': lon,
-                    'temperature_k': temp_k,
-                    'temperature_c': temp_k - 273.15,
-                    'confidence': conf,
-                    'reading_timestamp': datetime.now().replace(microsecond=0), # Estabiliza o timestamp para o cache
-                    'alert_type': 'LIVE_MaaS',
-                    'severity': 'CRITICAL' if temp_k > 330 else 'INFO'
-                })
+            lat, lon, temp_k, conf, rec_id = struct.unpack(STRUCT_FORMAT, chunk)
+            if rec_id == 0: continue
             
-            memory.close_fd()
-            return pd.DataFrame(data)
+            data.append({
+                'latitude': lat,
+                'longitude': lon,
+                'temperature_k': temp_k,
+                'temperature_c': temp_k - 273.15,
+                'confidence': conf,
+                'reading_timestamp': datetime.now().replace(microsecond=0),
+                'alert_type': 'LIVE_MaaS_Network',
+                'severity': 'CRITICAL' if temp_k > 330 else 'INFO'
+            })
+            
+        return pd.DataFrame(data)
     except Exception as e:
-        # Silencioso no dash para não poluir UI se o MaaS ainda estiver subindo
         return pd.DataFrame()
 
 def get_data(hours: int) -> pd.DataFrame:
@@ -99,13 +107,8 @@ def get_data(hours: int) -> pd.DataFrame:
     engine = get_engine()
     query = f"""
         SELECT 
-            sr.latitude, 
-            sr.longitude, 
-            sr.temperature_k, 
-            sr.confidence, 
-            sr.reading_timestamp,
-            ah.alert_type,
-            ah.severity
+            sr.latitude, sr.longitude, sr.temperature_k, sr.confidence, sr.reading_timestamp,
+            ah.alert_type, ah.severity
         FROM sentinela_ambiental.sensor_readings sr
         JOIN sentinela_ambiental.alerts_history ah ON sr.id = ah.reading_id
         WHERE sr.reading_timestamp >= NOW() - INTERVAL '{hours} hours'
@@ -113,15 +116,13 @@ def get_data(hours: int) -> pd.DataFrame:
     """
     try:
         df = pd.read_sql(query, engine)
-        # Conversão de Kelvin para Celsius para melhor leitura humana
         df['temperature_c'] = df['temperature_k'] - 273.15
         return df
-    except Exception as e:
-        st.error(f"Erro ao conectar ao Banco de Dados: {e}")
+    except Exception:
         return pd.DataFrame()
 
 # 3. SIDEBAR E INTEGRAÇÃO IBGE
-@st.cache_data
+@st.cache_data(ttl=3600)
 def get_ibge_states():
     try:
         response = requests.get("https://servicodados.ibge.gov.br/api/v1/localidades/estados", timeout=5)
@@ -132,19 +133,11 @@ def get_ibge_states():
             for s in states:
                 result[f"{s['nome']} ({s['sigla']})"] = s['sigla']
             return result
-    except Exception as e:
-        st.error(f"Erro ao buscar estados do IBGE: {e}")
-    return {"Brasil": "BR", "Espírito Santo (ES)": "ES"} # Fallback
+    except Exception: pass
+    return {"Brasil": "BR", "Espírito Santo (ES)": "ES"}
 
 def set_active_region(sigla: str):
     engine = get_engine()
-    query_create = text("""
-        CREATE TABLE IF NOT EXISTS sentinela_ambiental.system_config (
-            key VARCHAR(50) PRIMARY KEY,
-            value VARCHAR(255) NOT NULL,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
     query_upsert = text("""
         INSERT INTO sentinela_ambiental.system_config (key, value) 
         VALUES ('active_region', :val)
@@ -152,10 +145,8 @@ def set_active_region(sigla: str):
     """)
     try:
         with engine.begin() as conn:
-            conn.execute(query_create)
             conn.execute(query_upsert, {"val": sigla})
-    except Exception as e:
-        st.error(f"Erro ao salvar região ativa: {e}")
+    except Exception: pass
 
 STATE_BBOX = {
     'AC': [-73.99, -11.14, -66.62, -7.11], 'AL': [-38.23, -10.50, -35.15, -8.81],
@@ -177,26 +168,14 @@ STATE_BBOX = {
 st.sidebar.title("Configurações")
 st.sidebar.markdown("---")
 
-hours_filter = st.sidebar.slider(
-    "Janela de Tempo (Horas)",
-    min_value=1,
-    max_value=72,
-    value=24,
-    help="Selecione o período retroativo para visualização dos focos de calor."
-)
+hours_filter = st.sidebar.slider("Janela de Tempo (Horas)", 1, 72, 24)
 
 st.sidebar.markdown("### 📍 Região de Análise")
-
-country = st.sidebar.selectbox("País", ["Brasil"])
-
 ibge_states = get_ibge_states()
-state_options = list(ibge_states.keys())
-state = st.sidebar.selectbox("Estado", state_options)
+state = st.sidebar.selectbox("Estado", list(ibge_states.keys()))
 state_sigla = ibge_states[state]
 
-st.sidebar.info(f"Monitorando: {state}, {country}")
-
-# 3.2 CONTROLE DE ESTADO (EVITA RERUNS INFINITOS)
+# Controle de estado para evitar gravações constantes
 if 'last_state' not in st.session_state:
     st.session_state.last_state = state_sigla
     set_active_region(state_sigla)
@@ -206,137 +185,58 @@ if st.session_state.last_state != state_sigla:
     set_active_region(state_sigla)
     st.rerun()
 
+st.sidebar.info(f"Monitorando: {state}, Brasil")
 st.sidebar.markdown("---")
 st.sidebar.caption("Powered by **Quilombus MaaS** & **NASA FIRMS**")
 
 # 4. DASHBOARD PRINCIPAL
 st.title("🛡️ Sentinela Ambiental")
-st.subheader(f"Monitoramento Térmico - {state} em Tempo Real")
+st.subheader(f"Monitoramento Térmico - {state} (Tempo Real via MaaS)")
 
-st.markdown(f"Visualizando dados das últimas **{hours_filter} horas** processados via Memory-as-a-Service.")
-
-# Busca de dados de histórico (Banco de Dados)
 df_history = get_data(hours_filter)
-
-# Busca de dados em Tempo Real (Direto da RAM MaaS)
 df_live = get_maas_live_data()
 
-# Merge dos dados priorizando o "Live"
 if not df_live.empty:
-    st.sidebar.success("⚡ Conectado ao MaaS RAM (Live)")
-    # Concatena live com histórico
+    st.sidebar.success("⚡ Conectado ao MaaS RAM (Network)")
     df_alerts = pd.concat([df_live, df_history]).drop_duplicates(subset=['latitude', 'longitude'], keep='first')
 else:
-    st.sidebar.warning("⏳ MaaS RAM Offline (Usando apenas histórico)")
+    st.sidebar.warning("⏳ Aguardando MaaS Remote...")
     df_alerts = df_history
 
-# LÓGICA DE FILTRAGEM ESPACIAL
+# FILTRAGEM ESPACIAL
 if state_sigla == "BR":
-    map_center = [-14.235, -51.9253]
-    map_zoom = 4
+    map_center, map_zoom = [-14.235, -51.9253], 4
 else:
     bbox = STATE_BBOX.get(state_sigla, STATE_BBOX['ES'])
-    map_center = [(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2]
-    map_zoom = 6
-
-    # Filtra o DataFrame espacialmente pela bounding box do estado
+    map_center, map_zoom = [(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2], 6
     df_alerts = df_alerts[
-        (df_alerts['latitude'] >= bbox[1]) &
-        (df_alerts['latitude'] <= bbox[3]) &
-        (df_alerts['longitude'] >= bbox[0]) &
-        (df_alerts['longitude'] <= bbox[2])
+        (df_alerts['latitude'] >= bbox[1]) & (df_alerts['latitude'] <= bbox[3]) &
+        (df_alerts['longitude'] >= bbox[0]) & (df_alerts['longitude'] <= bbox[2])
     ]
 
 if df_alerts.empty:
-    st.warning(f"⚠️ Nenhum alerta crítico detectado em {state} para o período selecionado.")
-    # Mesmo sem dados, mostra o mapa centralizado no Estado
-    st.markdown("### 🗺️ Mapa de Anomalias Térmicas")
+    st.warning(f"⚠️ Nenhum alerta detectado em {state}.")
     m = folium.Map(location=map_center, zoom_start=map_zoom, tiles="cartodbpositron")
-    st_folium(m, width="100%", height=500)
-
+    st_folium(m, width="100%", height=500, key="maas_map")
 else:
-    # 5. KPIS / MÉTRICAS DE IMPACTO
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Alertas Críticos", len(df_alerts), delta=f"+{len(df_alerts[df_alerts['reading_timestamp'] > (datetime.now() - timedelta(hours=1))])} na última hora")
-    
-    with col2:
-        # Puxa o clima REAL da região selecionada para contexto
-        import requests
-        def get_weather(lat, lon):
-            try:
-                url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
-                r = requests.get(url, timeout=3)
-                if r.status_code == 200:
-                    return r.json().get("current_weather", {}).get("temperature")
-            except: pass
-            return None
-        
-        real_temp = get_weather(map_center[0], map_center[1])
-        if real_temp:
-            st.metric("Temp. Ambiente Atual", f"{real_temp} °C", help="Temperatura climática real medida agora na cidade.")
-        else:
-            st.metric("Temp. Ambiente Atual", "-- °C")
-        
-    with col3:
-        st.metric("Nível de Crise", "Crítica" if len(df_alerts) > 100 else "Atenção" if len(df_alerts) > 20 else "Leve")
-        
-    with col4:
-        # Mostra o pico de temperatura do Estado selecionado
-        if len(df_alerts) > 0:
-            max_temp = df_alerts['temperature_c'].max()
-            st.metric("Pico de Temp. Identificada", f"{max_temp:.1f} °C")
-        else:
-            st.metric("Pico de Temp.", "--")
+    # KPIS
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Alertas Críticos", len(df_alerts))
+    c2.metric("Nível de Crise", "Crítica" if len(df_alerts) > 100 else "Atenção" if len(df_alerts) > 20 else "Leve")
+    c3.metric("Pico Identificado", f"{df_alerts['temperature_c'].max():.1f} °C")
+    c4.metric("Status MaaS", "Connected")
 
-    # 6. MAPA INTERATIVO (FOLIUM)
-    st.markdown("### 🗺️ Mapa de Anomalias Térmicas")
-    
+    # MAPA
     m = folium.Map(location=map_center, zoom_start=map_zoom, tiles="cartodbpositron")
-    
     for _, row in df_alerts.iterrows():
-        # Cor baseada na severidade/temperatura
-        color = "red" if row['temperature_c'] > 60 else "orange"
-        
         folium.CircleMarker(
             location=[row['latitude'], row['longitude']],
-            radius=row['confidence'] / 10, # Tamanho baseado na confiança
-            color=color,
-            fill=True,
-            fill_color=color,
-            fill_opacity=0.7,
-            tooltip=f"Foco a {row['temperature_c']:.1f} °C 🔥",
-            popup=folium.Popup(f"""
-                <b>🔥 ALERTA DE INCÊNDIO / CALOR</b><br>
-                <b>Tipo:</b> {row['alert_type']}<br>
-                <b>Temp do Foco (Solo):</b> <span style="color:red">{row['temperature_c']:.2f} °C</span><br>
-                <b>Confiança:</b> {row['confidence']}%<br>
-                <b>Horário:</b> {row['reading_timestamp'].strftime('%H:%M:%S')}
-            """, max_width=250)
+            radius=row['confidence'] / 10,
+            color="red" if row['temperature_c'] > 60 else "orange",
+            fill=True, fill_opacity=0.7,
+            tooltip=f"{row['temperature_c']:.1f} °C 🔥"
         ).add_to(m)
-
     st_folium(m, width="100%", height=500, key="maas_map")
 
-    # 7. ANÁLISE TEMPORAL E TABELA
-    c_left, c_right = st.columns([2, 1])
-    
-    with c_left:
-        st.markdown("### 📈 Tendência de Calor (Frequência)")
-        df_alerts['hora'] = df_alerts['reading_timestamp'].dt.hour
-        fig = px.histogram(df_alerts, x="hora", nbins=24, 
-                           title="Distribuição de Alertas por Hora do Dia",
-                           labels={'hora': 'Hora do Dia', 'count': 'Nº de Alertas'},
-                           color_discrete_sequence=['#e63946'])
-        st.plotly_chart(fig, use_container_width=True)
-
-    with c_right:
-        st.markdown("### 📋 Últimos Registros")
-        st.dataframe(
-            df_alerts[['temperature_c', 'confidence', 'reading_timestamp']].head(10),
-            use_container_width=True
-        )
-
-# Rodapé técnico
 st.markdown("---")
-st.caption(f"Dados atualizados em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} | Filtragem Espacial Dinâmica Ativada")
+st.caption(f"Dados atualizados em: {datetime.now().strftime('%H:%M:%S')} | Modo de Rede Direto Ativado")

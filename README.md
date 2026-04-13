@@ -124,7 +124,7 @@ O projeto demonstra o conceito de **Memory Disaggregation**, permitindo que o *S
 
 Após subir os containers com o Docker Compose (`docker compose up -d`), as interfaces podem ser acessadas localmente:
 
-1. **Dashboard MaaS (Next.js):** [http://localhost:3002](http://localhost:3002)
+1. **Dashboard MaaS (Next.js):** [http://100.114.106.28:3002](http://100.114.106.28:3002)
    - Interface principal para observabilidade e visualização estatística do balanceamento de memória.
 2. **Sentinela Dashboard (Streamlit):** [http://localhost:8501](http://localhost:8501)
    - Interface analítica focada nos dados consumidos de anomalias termais, com filtros geográficos e KPIs.

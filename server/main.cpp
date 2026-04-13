@@ -259,6 +259,36 @@ public:
         std::cerr << "[SHM] Rollback: " << res.shm_name << "\n";
     }
 
+    // -------------------------------------------------------------------------
+    // write — Escreve bytes diretamente na SHM (I/O de rede)
+    // -------------------------------------------------------------------------
+    bool write(const std::string& allocation_id, std::size_t offset, const char* data, std::size_t len) {
+        std::shared_lock lock(mutex_);
+        auto it = blocks_.find(allocation_id);
+        if (it == blocks_.end()) return false;
+
+        const ShmBlock& blk = it->second;
+        if (offset + len > blk.size) return false;
+
+        std::memcpy(static_cast<char*>(blk.ptr) + offset, data, len);
+        return true;
+    }
+
+    // -------------------------------------------------------------------------
+    // read — Lê bytes diretamente da SHM (I/O de rede)
+    // -------------------------------------------------------------------------
+    bool read(const std::string& allocation_id, std::size_t offset, std::size_t len, std::string& out) {
+        std::shared_lock lock(mutex_);
+        auto it = blocks_.find(allocation_id);
+        if (it == blocks_.end()) return false;
+
+        const ShmBlock& blk = it->second;
+        if (offset + len > blk.size) return false;
+
+        out.assign(static_cast<const char*>(blk.ptr) + offset, len);
+        return true;
+    }
+
     [[nodiscard]] std::size_t used()         const { return used_.load(); }
     [[nodiscard]] std::size_t capacity()     const { return capacity_; }
     [[nodiscard]] std::size_t active_count() const {
@@ -598,6 +628,49 @@ public:
         resp->set_message("Recebidas " + std::to_string(count) + " métricas");
 
         std::cout << "[METRICS] " << count << " métricas processadas\n";
+        return grpc::Status::OK;
+    }
+
+    // -------------------------------------------------------------------------
+    // WriteMemory — [NOVO] Escrita na RAM via rede (gRPC)
+    // -------------------------------------------------------------------------
+    grpc::Status WriteMemory(
+        grpc::ServerContext* /*ctx*/,
+        const maas::WriteRequest* req,
+        maas::Acknowledge* resp
+    ) override {
+        if (req->allocation_id().empty()) {
+            return grpc::Status(grpc::INVALID_ARGUMENT, "allocation_id é obrigatório");
+        }
+
+        bool ok = shm_.write(req->allocation_id(), req->offset(), req->data().data(), req->data().size());
+        if (!ok) {
+            return grpc::Status(grpc::OUT_OF_RANGE, "Erro ao escrever na memória (ID inválido ou offset fora dos limites)");
+        }
+
+        resp->set_message("Escrita realizada com sucesso");
+        return grpc::Status::OK;
+    }
+
+    // -------------------------------------------------------------------------
+    // ReadMemory — [NOVO] Leitura da RAM via rede (gRPC)
+    // -------------------------------------------------------------------------
+    grpc::Status ReadMemory(
+        grpc::ServerContext* /*ctx*/,
+        const maas::ReadRequest* req,
+        maas::ReadResponse* resp
+    ) override {
+        if (req->allocation_id().empty()) {
+            return grpc::Status(grpc::INVALID_ARGUMENT, "allocation_id é obrigatório");
+        }
+
+        std::string buffer;
+        bool ok = shm_.read(req->allocation_id(), req->offset(), req->size_bytes(), buffer);
+        if (!ok) {
+            return grpc::Status(grpc::OUT_OF_RANGE, "Erro ao ler da memória (ID inválido ou offset fora dos limites)");
+        }
+
+        resp->set_data(std::move(buffer));
         return grpc::Status::OK;
     }
 

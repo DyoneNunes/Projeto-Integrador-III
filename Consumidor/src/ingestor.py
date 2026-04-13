@@ -2,8 +2,6 @@ import os
 import sys
 import time
 import struct
-import mmap
-import posix_ipc
 import requests
 import grpc
 import psycopg2
@@ -15,6 +13,7 @@ load_dotenv()
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 import maas_pb2
 import maas_pb2_grpc
+from maas_client import MaaSMemory
 
 NASA_MAP_KEY = os.getenv("NASA_MAP_KEY")
 MAAS_BUFFER_SIZE = int(os.getenv("MAAS_BUFFER_SIZE", 10485760))
@@ -146,29 +145,12 @@ def get_active_region_bbox() -> str:
             conn.close()
     return default_bbox
 
-def get_shared_memory(shm_name: str, size: int) -> mmap.mmap:
+def get_remote_memory(stub, allocation_id: str, size: int) -> MaaSMemory:
     """
-    Abre a memória compartilhada POSIX criada pelo MaaS Core.
-    NÃO usa O_CREAT — o segmento já foi criado pelo servidor C++.
+    Inicializa a abstração de memória via rede.
     """
-    retries = 10
-    while retries > 0:
-        try:
-            memory = posix_ipc.SharedMemory(shm_name)
-            map_file = mmap.mmap(memory.fd, size)
-            memory.close_fd()
-            print(f"[+] Memória compartilhada '{shm_name}' mapeada com sucesso ({size} bytes)")
-            return map_file
-        except posix_ipc.ExistentialError:
-            print(f"[*] Aguardando SHM '{shm_name}' aparecer em /dev/shm... ({retries} tentativas)")
-            retries -= 1
-            time.sleep(2)
-        except Exception as e:
-            print(f"[-] Erro ao mapear SHM: {e}")
-            retries -= 1
-            time.sleep(2)
-    
-    raise RuntimeError(f"Falha ao abrir memória compartilhada '{shm_name}'")
+    print(f"[+] Inicializando acesso à memória via REDE (allocation_id: {allocation_id})")
+    return MaaSMemory(stub, allocation_id, size)
 
 
 def parse_confidence(conf_raw: str) -> int:
@@ -246,11 +228,14 @@ def run_ingestor():
     tenant_id = get_or_create_tenant()
     
     # 2. Handshake gRPC real com MaaS Core
-    alloc = perform_maas_handshake(tenant_id)
-    shm_name = alloc["shm_key"]
+    channel = grpc.insecure_channel(MAAS_GRPC_HOST)
+    stub = maas_pb2_grpc.MemoryServiceStub(channel)
     
-    # 3. Abre a memória compartilhada criada pelo MaaS Core
-    mm = get_shared_memory(shm_name, MAAS_BUFFER_SIZE)
+    alloc = perform_maas_handshake(tenant_id)
+    alloc_id = alloc["allocation_id"]
+    
+    # 3. Inicializa acesso à memória via rede
+    mm = get_remote_memory(stub, alloc_id, MAAS_BUFFER_SIZE)
     
     offset = 0
     while True:
