@@ -23,6 +23,10 @@ services:
       timeout: 3s
       retries: 10
     shm_size: "256mb"
+    networks:
+      maas-network:
+        aliases:
+          - maas-db
 
   # ---------------------------------------------------------------------------
   # MaaS Core — Servidor C++ gRPC com gerenciamento de memória via mmap
@@ -49,6 +53,8 @@ services:
       memlock:
         soft: -1
         hard: -1
+    networks:
+      - maas-network
 
   # ---------------------------------------------------------------------------
   # Dashboard — Next.js observability panel
@@ -69,6 +75,13 @@ services:
         condition: service_healthy
       maas-core:
         condition: service_started
+    networks:
+      - maas-network
+
+networks:
+  maas-network:
+    name: maas-network
+    driver: bridge
 
 volumes:
   pgdata:

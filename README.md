@@ -10,10 +10,19 @@
 
 ---
 
-## 📌 Contexto Acadêmico
+## 📌 Contexto Acadêmico (PI-III)
 Este projeto é desenvolvido como parte integrante da Unidade Curricular **Projeto Integrador Computação III** (5º Período) do curso de Tecnologia em Análise e Desenvolvimento de Sistemas (**TADS**) na **FAESA Centro Universitário**.
 
-**Orientador:** Mestre Howard Roatti
+**Orientador:** Prof. Me. Howard Cruz Roatti
+
+### 🌍 Tema e Impacto Social
+O projeto foca na área de **Meio Ambiente**, utilizando o ecossistema MaaS para ingestão e processamento de dados térmicos em altíssima velocidade (Sentinela Ambiental). 
+**Sociedade Impactada:** Órgãos de Defesa Civil do Brasil, Corpo de Bombeiros, Secretarias de Meio Ambiente e a população brasileira afetada pelos impactos adversos de incêndios florestais e urbanos.
+
+### 📊 Ciência de Dados e Métricas
+Cumprindo os requisitos do edital, aplicamos modelagem analítica (*Data Mining*) via **Thresholding Contínuo** nos fluxos massivos de dados em memória. 
+* **Métrica Principal (Desempenho/Impacto):** Volume de ruídos térmicos do clima descartados vs. Alertas Críticos confirmados (filtragem para Confiança >= 80% e Temp >= 330K).
+* **Solução Web:** O projeto final conta com um painel (Streamlit) dotado de relatórios, KPIs geolocalizados e mapas indicativos de calor, idealizado para acelerar a tomada de decisão do poder público.
 
 ---
 
@@ -35,9 +44,58 @@ O ecossistema MaaS é dividido em dois planos principais para garantir performan
 
 ---
 
-## 👥 Colaboradores (Core Team)
+## 🛰️ Módulo Consumidor: Sentinela Ambiental
 
-* **Dyone Andrade** - *Full Stack Developer, DevOps Engineer & Engineer IA* 
+O módulo `Consumidor` é um ecossistema Python especializado em monitoramento ambiental nacional, atuando como o principal cliente da infraestrutura MaaS.
+
+### 🏗️ Fluxo de Dados e Arquitetura
+```mermaid
+graph LR
+    A[NASA FIRMS API] -->|CSV National| B(Ingestor Python)
+    B -->|Handshake gRPC| C{MaaS Core C++}
+    C -->|Aloca SHM| B
+    B -->|Protocolo Binário| D[RAM: Shared Memory]
+    D -->|Zero Latency Read| E(Processor Python)
+    E -->|Data Science Thresholding| E
+    E -->|Persistência| F[(PostgreSQL)]
+    F --> G[Sentinela Dashboard]
+    H[IBGE API] -.->|Filtro Dinâmico| G
+```
+
+### 📄 Protocolo Binário (Low-Level)
+Para garantir a performance PaaS, o Ingestor e o Processador comunicam-se via RAM utilizando uma estrutura binária compacta de **32 bytes** por registro:
+| Campo | Tipo | Tamanho | Descrição |
+| :--- | :--- | :--- | :--- |
+| **Latitude** | Double | 8 bytes | Coordenada Y (WGS84) |
+| **Longitude** | Double | 8 bytes | Coordenada X (WGS84) |
+| **Temperatura** | Double | 8 bytes | Brilho térmico em Kelvin |
+| **Confiança** | Integer | 4 bytes | Índice de precisão (0-100%) |
+| **ID Record** | Integer | 4 bytes | Identificador único do satélite |
+
+### ⚙️ Configuração (.env)
+Principais variáveis para o módulo Consumidor:
+| Variável | Exemplo | Descrição |
+| :--- | :--- | :--- |
+| `NASA_MAP_KEY` | `96284...` | Chave de API FIRMS (VIIRS/MODIS) |
+| `DB_CONNECTION` | `postgresql://...` | Conexão com o banco local de insights |
+| `MAAS_DB_URL` | `postgresql://...` | Banco de alocação do PaaS (MaaS Core) |
+| `MAAS_BUFFER_SIZE`| `104857600` | Tamanho da RAM alocada (100MB) |
+
+### 💡 Visão Arquitetural: Disaggregation & Stateless Client
+
+O projeto demonstra o conceito de **Memory Disaggregation**, permitindo que o *Sentinela Ambiental* opere como uma aplicação **Stateless** (sem estado local). Todo o peso do processamento de Ciência de Dados e grandes volumes de informação é movido para a camada de memória gerenciada pelo MaaS, o que reflete a tendência das grandes infraestruturas modernas de nuvem.
+
+**Cenário de Demonstração (Híbrido):**
+- **Sede (Core):** MaaS Core operando em um ambiente *HomeLab* (Infra-estrutura privada).
+- **Cliente (Edge/Cloud):** Sentinela Ambiental hospedado no *Google Cloud Platform (GCP)*.
+- **Vantagem:** O cliente aluga memória remota para realizar o "trabalho sujo" de processamento massivo, otimizando ao máximo o consumo de RAM local no servidor da GCP e reduzindo custos operacionais.
+
+---
+
+## 👥 Equipe do Projeto (Core)
+
+* **Dyone Nunes de Andrade** - *Desenvolvimento Full Stack, Engenharia de Dados e Infraestrutura* 
+*(Demais membros/detalhes da formação do grupo enviados via canal oficial até 17/03).*
 
 ---
 
@@ -45,8 +103,28 @@ O ecossistema MaaS é dividido em dois planos principais para garantir performan
 
 ```bash
 ├── maas-core/         # Motor de memória em C++
-├── maas-dashboard/    # Interface PaaS em Next.js
-├── maas-sdk/          # Biblioteca de integração para clientes
-├── infra/             # Dockerfiles e Scripts de CI/CD (GitHub Actions)
-└── docs/              # Documentação técnica e Diagramas (LaTeX)
-# Projeto-Integrador-III
+├── dashboard/         # Interface PaaS em Next.js
+├── Consumidor/        # Ingestor Python e Sentinela Dashboard
+├── proto/             # Contratos gRPC
+└── db/                # Scripts de Inicialização Postgres
+```
+
+---
+
+## ✨ Últimas Atualizações
+
+* **Monitoramento Nacional (Brasil):** O sistema agora monitora o território brasileiro por completo, utilizando o endpoint de país (`BRA`) da API da NASA.
+* **Integração IBGE API:** Implementada seleção dinâmica de estados via API oficial do IBGE, permitindo filtragem espacial instantânea no Dashboard.
+* **Arquitetura de Buffer Circular (MaaS):** Otimização da sincronia entre Ingestor e Processador via memória RAM compartilhada (100MB / 3.2M de registros), garantindo latência zero e persistência resiliente no PostgreSQL.
+* **Correções de Infraestrutura:** Resoluções nas redes do Docker e permissões para garantir a conexão sem falhas entre os conteineres gRPC e PostgreSQL.
+
+---
+
+## 🚀 Como Acessar (Frontend)
+
+Após subir os containers com o Docker Compose (`docker compose up -d`), as interfaces podem ser acessadas localmente:
+
+1. **Dashboard MaaS (Next.js):** [http://localhost:3002](http://localhost:3002)
+   - Interface principal para observabilidade e visualização estatística do balanceamento de memória.
+2. **Sentinela Dashboard (Streamlit):** [http://localhost:8501](http://localhost:8501)
+   - Interface analítica focada nos dados consumidos de anomalias termais, com filtros geográficos e KPIs.
