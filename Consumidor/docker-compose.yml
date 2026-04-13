@@ -1,0 +1,81 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: sentinela_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password_sentinela
+      POSTGRES_DB: postgres
+    ports:
+      - "5436:5432"
+    volumes:
+      - ./db/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ingestor:
+    build: .
+    container_name: sentinela_ingestor
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - /dev/shm:/dev/shm
+      - ../proto:/app/proto:ro
+      - ./src:/app/src
+    networks:
+      - default
+      - maas-network
+    command: python src/ingestor.py
+
+  processor:
+    build: .
+    container_name: sentinela_processor
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      ingestor:
+        condition: service_started
+    env_file:
+      - .env
+    volumes:
+      - /dev/shm:/dev/shm
+      - ./src:/app/src
+    networks:
+      - default
+    command: python src/data_processor.py
+
+  dashboard:
+    build: .
+    container_name: sentinela_dashboard
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - /dev/shm:/dev/shm
+      - ./src:/app/src
+    ports:
+      - "8501:8501"
+    networks:
+      - default
+    command: streamlit run src/dashboard.py --server.address=0.0.0.0
+
+networks:
+  maas-network:
+    external: true
+    name: maas-network
+
+volumes:
+  postgres_data:

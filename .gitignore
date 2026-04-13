@@ -35,5 +35,3 @@ pgdata/
 # OS
 .DS_Store
 Thumbs.db
-# Separate projects
-Consumidor/
