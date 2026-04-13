@@ -207,6 +207,11 @@ public:
         blocks_.emplace(allocation_id, std::move(blk));
     }
 
+    bool has_block(const std::string& allocation_id) {
+        std::shared_lock lock(mutex_);
+        return blocks_.find(allocation_id) != blocks_.end();
+    }
+
     // -------------------------------------------------------------------------
     // release — Desmapeia, desvincula o SHM e libera a capacidade
     // -------------------------------------------------------------------------
@@ -645,6 +650,11 @@ public:
 
         bool ok = shm_.write(req->allocation_id(), req->offset(), req->data().data(), req->data().size());
         if (!ok) {
+            std::cerr << "[DEBUG] Erro de Escrita: ID=" << req->allocation_id() 
+                      << ", offset=" << req->offset() << ", size=" << req->data().size() << std::endl;
+            if (!shm_.has_block(req->allocation_id())) {
+                std::cerr << "[DEBUG] Motivo: ID não encontrado no mapa local do servidor." << std::endl;
+            }
             return grpc::Status(grpc::OUT_OF_RANGE, "Erro ao escrever na memória (ID inválido ou offset fora dos limites)");
         }
 
@@ -667,6 +677,11 @@ public:
         std::string buffer;
         bool ok = shm_.read(req->allocation_id(), req->offset(), req->size_bytes(), buffer);
         if (!ok) {
+            std::cerr << "[DEBUG] Erro de Leitura: ID=" << req->allocation_id() 
+                      << ", offset=" << req->offset() << ", size=" << req->size_bytes() << std::endl;
+            if (!shm_.has_block(req->allocation_id())) {
+                std::cerr << "[DEBUG] Motivo: ID não encontrado no mapa local do servidor." << std::endl;
+            }
             return grpc::Status(grpc::OUT_OF_RANGE, "Erro ao ler da memória (ID inválido ou offset fora dos limites)");
         }
 
