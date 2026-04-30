@@ -49,6 +49,8 @@ CREATE TABLE IF NOT EXISTS sentinela_ambiental.sensor_readings (
     latitude DOUBLE PRECISION NOT NULL,
     longitude DOUBLE PRECISION NOT NULL,
     temperature_k DOUBLE PRECISION NOT NULL,
+    frp DOUBLE PRECISION,
+    satellite_type INT,
     confidence INT,
     reading_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
