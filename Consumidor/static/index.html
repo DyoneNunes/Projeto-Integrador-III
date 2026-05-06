@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinela Ambiental - Painel 3D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/globe.gl@2.35.1/dist/globe.gl.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background: #0a0a0f; font-family: 'Inter', sans-serif; }
+        #globeViz { width: 100vw; height: 100vh; }
+        .overlay { position: absolute; pointer-events: none; z-index: 10; }
+        .panel { pointer-events: auto; background: rgba(10, 10, 20, 0.82); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.06); }
+        .kpi-value { font-variant-numeric: tabular-nums; }
+
+        /* Status glow */
+        .status-online {
+            box-shadow: 0 0 6px 2px rgba(34, 197, 94, 0.5), 0 0 12px 4px rgba(34, 197, 94, 0.2);
+        }
+
+        /* Sidebar */
+        #sidebar {
+            position: absolute; top: 0; right: 0; height: 100vh; width: 280px;
+            background: rgba(8, 8, 18, 0.88); backdrop-filter: blur(16px);
+            border-left: 1px solid rgba(255,255,255,0.06);
+            z-index: 50; transition: transform 0.3s ease;
+            pointer-events: auto; overflow-y: auto;
+        }
+        #sidebar.collapsed { transform: translateX(100%); }
+        #sidebar-toggle {
+            position: absolute; top: 50%; right: 280px; transform: translateY(-50%);
+            z-index: 51; pointer-events: auto; transition: right 0.3s ease;
+        }
+        #sidebar-toggle.collapsed { right: 0; }
+
+        /* Tooltip */
+        #tooltip {
+            position: fixed; display: none; z-index: 9999; pointer-events: none;
+            background: rgba(10, 10, 20, 0.95); backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 100, 50, 0.5); border-radius: 8px;
+            padding: 12px 16px; max-width: 320px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+        }
+
+        /* Range sliders */
+        input[type="range"] {
+            -webkit-appearance: none; appearance: none; width: 100%;
+            height: 4px; border-radius: 2px; background: #2a2a3a; outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none; width: 14px; height: 14px;
+            border-radius: 50%; background: #ff6633; cursor: pointer; border: 2px solid #1a1a2e;
+        }
+
+        /* Checkbox custom */
+        .cb-custom { accent-color: #ff6633; }
+
+        /* Export button */
+        .btn-export {
+            background: linear-gradient(135deg, #1e3a5f, #1a2744);
+            transition: all 0.2s ease;
+        }
+        .btn-export:hover {
+            background: linear-gradient(135deg, #2a4f7f, #1e3a5f);
+            box-shadow: 0 0 12px rgba(59, 130, 246, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="overlay top-0 left-0 p-4 space-y-3">
+        <div class="panel rounded-xl px-6 py-4 inline-flex items-center gap-4">
+            <div class="w-3 h-3 rounded-full bg-green-500 animate-pulse status-online"></div>
+            <div>
+                <h1 class="text-white text-lg font-bold tracking-tight">Sentinela Ambiental</h1>
+                <p class="text-gray-400 text-xs">Painel 3D &mdash; Manchas Termicas Hexagonais</p>
+            </div>
+        </div>
+
+        <!-- Glossario Tecnico -->
+        <div class="panel rounded-xl px-5 py-3 max-w-xs">
+            <h3 class="text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">Glossario</h3>
+            <div class="space-y-1 text-xs text-gray-400 leading-relaxed">
+                <p><span class="text-orange-400 font-medium">FRP</span> &mdash; Fire Radiative Power (Potencia Radiativa do Fogo - MW)</p>
+                <p><span class="text-red-400 font-medium">CRITICAL</span> / <span class="text-blue-400 font-medium">INFO</span> / <span class="text-green-400 font-medium">LOW</span> &mdash; Niveis de severidade</p>
+                <p><span class="text-emerald-400 font-medium">Confianca</span> &mdash; Probabilidade (%) de ser incendio real</p>
+                <p><span class="text-yellow-400 font-medium">Hexbins</span> &mdash; Agrupamento geografico por proximidade</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPIs (bottom-left) -->
+    <div class="overlay bottom-0 left-0 p-4">
+        <div class="panel rounded-xl px-6 py-4 flex gap-6">
+            <div class="text-center">
+                <div class="text-gray-400 text-xs uppercase tracking-wider">Focos Filtrados</div>
+                <div id="kpi-total" class="text-white text-2xl font-bold kpi-value">--</div>
+            </div>
+            <div class="text-center">
+                <div class="text-gray-400 text-xs uppercase tracking-wider">Criticos</div>
+                <div id="kpi-critical" class="text-red-400 text-2xl font-bold kpi-value">--</div>
+            </div>
+            <div class="text-center">
+                <div class="text-gray-400 text-xs uppercase tracking-wider">Pico FRP</div>
+                <div id="kpi-frp" class="text-orange-400 text-2xl font-bold kpi-value">--</div>
+            </div>
+            <div class="text-center">
+                <div class="text-gray-400 text-xs uppercase tracking-wider">Confianca Media</div>
+                <div id="kpi-conf" class="text-emerald-400 text-2xl font-bold kpi-value">--</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Toggle Button -->
+    <button id="sidebar-toggle" class="panel rounded-l-lg px-2 py-4 text-gray-300 hover:text-white transition-colors">
+        <svg id="toggle-icon" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg>
+    </button>
+
+    <!-- Sidebar Controls -->
+    <div id="sidebar">
+        <div class="p-5 space-y-6">
+            <!-- Title -->
+            <div class="border-b border-gray-700/50 pb-4">
+                <h2 class="text-white text-sm font-semibold uppercase tracking-wider">Controles</h2>
+            </div>
+
+            <!-- Janela Temporal -->
+            <div>
+                <label class="text-gray-400 text-xs uppercase tracking-wider block mb-2">Janela Temporal</label>
+                <select id="hours-filter" class="w-full bg-gray-800/60 text-white text-sm border border-gray-600/40 rounded-lg px-3 py-2 focus:outline-none focus:border-orange-500/50">
+                    <option value="6">6 horas</option>
+                    <option value="12">12 horas</option>
+                    <option value="24" selected>24 horas</option>
+                    <option value="48">48 horas</option>
+                    <option value="72">72 horas</option>
+                </select>
+            </div>
+
+            <!-- Região -->
+            <div>
+                <label class="text-gray-400 text-xs uppercase tracking-wider block mb-2">Região</label>
+                <select id="region-filter" class="w-full bg-gray-800/60 text-white text-sm border border-gray-600/40 rounded-lg px-3 py-2 focus:outline-none focus:border-orange-500/50">
+                    <option value="global" selected>Global (Todas)</option>
+                    <option value="south_america">América do Sul</option>
+                    <option value="north_america">América do Norte</option>
+                    <option value="africa">África</option>
+                    <option value="europe">Europa</option>
+                    <option value="asia">Ásia</option>
+                    <option value="oceania">Oceania</option>
+                </select>
+            </div>
+
+            <!-- Tipo Térmico -->
+            <div>
+                <label class="text-gray-400 text-xs uppercase tracking-wider block mb-3">Tipo Térmico</label>
+                <div class="space-y-2">
+                    <label class="flex items-center gap-3 cursor-pointer group">
+                        <input type="checkbox" id="cb-heat" class="cb-custom w-4 h-4 rounded" checked>
+                        <span class="text-orange-400 text-sm group-hover:text-orange-300">🔥 Calor (Focos Térmicos)</span>
+                    </label>
+                    <label class="flex items-center gap-3 cursor-pointer group">
+                        <input type="checkbox" id="cb-cold" class="cb-custom w-4 h-4 rounded" checked>
+                        <span class="text-cyan-400 text-sm group-hover:text-cyan-300">❄️ Frio (Anomalias Frias)</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Severidade -->
+            <div>
+                <label class="text-gray-400 text-xs uppercase tracking-wider block mb-3">Severidade</label>
+                <div class="space-y-2">
+                    <label class="flex items-center gap-3 cursor-pointer group">
+                        <input type="checkbox" id="cb-critical" class="cb-custom w-4 h-4 rounded" checked>
+                        <span class="text-red-400 text-sm group-hover:text-red-300">CRITICAL</span>
+                    </label>
+                    <label class="flex items-center gap-3 cursor-pointer group">
+                        <input type="checkbox" id="cb-info" class="cb-custom w-4 h-4 rounded" checked>
+                        <span class="text-blue-400 text-sm group-hover:text-blue-300">INFO</span>
+                    </label>
+                    <label class="flex items-center gap-3 cursor-pointer group">
+                        <input type="checkbox" id="cb-low" class="cb-custom w-4 h-4 rounded" checked>
+                        <span class="text-green-400 text-sm group-hover:text-green-300">LOW</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Confianca Minima -->
+            <div>
+                <div class="flex justify-between items-center mb-2">
+                    <label class="text-gray-400 text-xs uppercase tracking-wider">Confianca Minima</label>
+                    <span id="conf-value" class="text-orange-400 text-xs font-mono font-bold">80%</span>
+                </div>
+                <input type="range" id="slider-conf" min="0" max="100" value="80" step="5">
+            </div>
+
+            <!-- FRP Minimo -->
+            <div>
+                <div class="flex justify-between items-center mb-2">
+                    <label class="text-gray-400 text-xs uppercase tracking-wider">FRP Minimo</label>
+                    <span id="frp-value" class="text-orange-400 text-xs font-mono font-bold">0 MW</span>
+                </div>
+                <input type="range" id="slider-frp" min="0" max="100" value="0" step="1">
+            </div>
+
+            <!-- Hex Radius -->
+            <div>
+                <div class="flex justify-between items-center mb-2">
+                    <label class="text-gray-400 text-xs uppercase tracking-wider">Raio Hex</label>
+                    <span id="hex-radius-value" class="text-orange-400 text-xs font-mono font-bold">0.6</span>
+                </div>
+                <input type="range" id="slider-hex-radius" min="3" max="12" value="6" step="1">
+            </div>
+
+            <!-- Info -->
+            <div class="border-t border-gray-700/50 pt-4">
+                <p class="text-gray-500 text-xs leading-relaxed">
+                    Hexbins agrupam focos por proximidade. A altura e cor representam o FRP agregado da regiao.
+                </p>
+            </div>
+
+            <!-- Export Button -->
+            <div class="border-t border-gray-700/50 pt-4">
+                <button id="btn-export-pdf" class="btn-export w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-white text-sm font-medium border border-blue-500/30">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    Baixar Relatorio (PDF)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tooltip -->
+    <div id="tooltip">
+        <div id="tooltip-content"></div>
+    </div>
+
+    <!-- Globe container -->
+    <div id="globeViz"></div>
+
+    <script>
+    (function() {
+        // ========== ESTADO GLOBAL ==========
+        let rawData = [];
+        let filteredData = [];
+
+        // ========== ELEMENTOS DOM ==========
+        const tooltip = document.getElementById('tooltip');
+        const tooltipContent = document.getElementById('tooltip-content');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const toggleIcon = document.getElementById('toggle-icon');
+
+        const cbCritical = document.getElementById('cb-critical');
+        const cbInfo = document.getElementById('cb-info');
+        const cbLow = document.getElementById('cb-low');
+        const sliderConf = document.getElementById('slider-conf');
+        const sliderFrp = document.getElementById('slider-frp');
+        const sliderHexRadius = document.getElementById('slider-hex-radius');
+        const confValue = document.getElementById('conf-value');
+        const frpValue = document.getElementById('frp-value');
+        const hexRadiusValue = document.getElementById('hex-radius-value');
+
+        // ========== SIDEBAR TOGGLE ==========
+        sidebarToggle.addEventListener('click', () => {
+            sidebar.classList.toggle('collapsed');
+            sidebarToggle.classList.toggle('collapsed');
+            toggleIcon.style.transform = sidebar.classList.contains('collapsed') ? 'rotate(180deg)' : '';
+        });
+
+        // ========== ESTADO DO HOVER (por coordenadas, nao por referencia) ==========
+        let hoverHexLat = null;
+        let hoverHexLng = null;
+
+        function isHexHovered(d) {
+            if (hoverHexLat === null) return false;
+            return Math.abs(d.lat - hoverHexLat) < 0.001 && Math.abs(d.lng - hoverHexLng) < 0.001;
+        }
+
+        // ========== ESCALA DE COR (calor=vermelho/amarelo, frio=azul/ciano) ==========
+        function hexColorScale(aggregatedFrp, hovered, points) {
+            if (hovered) return 'rgba(255, 255, 255, 0.95)';
+            // Determina se hex é predominantemente frio ou calor
+            const coldCount = points ? points.filter(p => p.thermal_type === 'cold').length : 0;
+            const isCold = points && coldCount > points.length / 2;
+            const t = Math.min(aggregatedFrp / 400, 1);
+            if (isCold) {
+                // Azul claro → azul escuro
+                const r = Math.round(50 * (1 - t));
+                const g = Math.round(180 * (1 - t * 0.5));
+                const b = 255;
+                return `rgba(${r},${g},${b},${0.7 + t * 0.25})`;
+            }
+            // Amarelo → vermelho escuro
+            const r = 255;
+            const g = Math.round(220 * (1 - t * 0.85));
+            const b = Math.round(50 * (1 - t));
+            return `rgba(${r},${g},${b},${0.7 + t * 0.25})`;
+        }
+
+        function hexSideColorScale(aggregatedFrp, hovered, points) {
+            if (hovered) return 'rgba(200, 200, 200, 0.85)';
+            const coldCount = points ? points.filter(p => p.thermal_type === 'cold').length : 0;
+            const isCold = points && coldCount > points.length / 2;
+            const t = Math.min(aggregatedFrp / 400, 1);
+            if (isCold) {
+                return `rgba(${Math.round(30*(1-t))},${Math.round(120*(1-t*0.5))},${200+Math.round(55*t)},0.6)`;
+            }
+            const r = 200 + Math.round(55 * t);
+            const g = Math.round(140 * (1 - t));
+            return `rgba(${r},${g},0,0.6)`;
+        }
+
+        // ========== INICIALIZA GLOBO (SOMENTE HEXBINS) ==========
+        const globe = Globe()
+            .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-night.jpg')
+            .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
+            .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
+            .atmosphereColor('#ff6633')
+            .atmosphereAltitude(0.15)
+            // Hexbins (manchas termicas)
+            .hexBinPointsData([])
+            .hexBinPointLat('lat')
+            .hexBinPointLng('lng')
+            .hexBinPointWeight(d => d.frp || 1)
+            .hexBinResolution(3)
+            .hexTopColor(d => hexColorScale(d.sumWeight, isHexHovered(d), d.points))
+            .hexSideColor(d => hexSideColorScale(d.sumWeight, isHexHovered(d), d.points))
+            .hexAltitude(d => {
+                const base = 0.02 + Math.min(d.sumWeight / 150, 0.8);
+                return isHexHovered(d) ? base * 1.4 : base;
+            })
+            .hexBinMerge(false)
+            .hexTransitionDuration(100)
+            .hexLabel(d => {
+                const points = d.points || [];
+                const count = points.length;
+                const totalFrp = d.sumWeight || 0;
+                const critCount = points.filter(p => p.severity === 'CRITICAL').length;
+                const maxSeverity = critCount > 0 ? 'CRITICAL' : (points.some(p => p.severity === 'INFO') ? 'INFO' : 'LOW');
+                const sevColor = maxSeverity==='CRITICAL'?'#f87171':maxSeverity==='INFO'?'#60a5fa':'#4ade80';
+                return `<div style="background:rgba(10,10,20,0.92);border:1px solid rgba(255,100,50,0.4);border-radius:6px;padding:8px 12px;color:#e5e7eb;font-size:11px;white-space:nowrap;">
+                    <span style="color:${sevColor};font-weight:bold;">${maxSeverity}</span> · ${count} focos · <span style="color:#fdba74;">${totalFrp.toFixed(0)} MW</span>
+                </div>`;
+            })
+            .onHexHover(handleHexHover)
+            .onHexClick(handleHexClick)
+            (document.getElementById('globeViz'));
+
+        // Posiciona camera no Brasil
+        globe.pointOfView({ lat: 20, lng: 0, altitude: 2.5 }, 1000);
+
+        // Controles orbitais - fixo, so move com interacao do mouse
+        const controls = globe.controls();
+        controls.autoRotate = false;
+
+        // Iluminação: simula luz solar vindo do ângulo da câmera
+        const scene = globe.scene();
+        scene.add(new THREE.DirectionalLight(0xffffff, 1.5));
+        scene.children[scene.children.length - 1].position.set(1, 0.8, 0.6);
+        scene.add(new THREE.AmbientLight(0x556677, 1.0));
+
+        // ========== HEX HOVER (apenas highlight visual) ==========
+        function handleHexHover(hex, prevHex) {
+            if (hex) {
+                hoverHexLat = hex.lat;
+                hoverHexLng = hex.lng;
+            } else {
+                hoverHexLat = null;
+                hoverHexLng = null;
+            }
+            // Força re-render para highlight
+            globe
+                .hexTopColor(d => hexColorScale(d.sumWeight, isHexHovered(d), d.points))
+                .hexSideColor(d => hexSideColorScale(d.sumWeight, isHexHovered(d), d.points))
+                .hexAltitude(d => {
+                    const base = 0.02 + Math.min(d.sumWeight / 150, 0.8);
+                    return isHexHovered(d) ? base * 1.4 : base;
+                });
+        }
+
+        // ========== HEX CLICK (modal detalhado) ==========
+        function handleHexClick(hex, event) {
+            if (!hex) {
+                tooltip.style.display = 'none';
+                return;
+            }
+
+            const points = hex.points || [];
+            const totalFrp = hex.sumWeight || 0;
+            const count = points.length;
+            const avgConf = count > 0 ? (points.reduce((s, p) => s + (p.confidence || 0), 0) / count) : 0;
+            const maxFrp = count > 0 ? Math.max(...points.map(p => p.frp || 0)) : 0;
+            const critCount = points.filter(p => p.severity === 'CRITICAL').length;
+            const maxSeverity = critCount > 0 ? 'CRITICAL' : (points.some(p => p.severity === 'INFO') ? 'INFO' : 'LOW');
+            const sevColor = maxSeverity === 'CRITICAL' ? 'text-red-400' : maxSeverity === 'INFO' ? 'text-blue-400' : 'text-green-400';
+
+            // Calcula centro a partir dos pontos (hex.lat/lng pode não existir)
+            const centerLat = count > 0 ? (points.reduce((s, p) => s + p.lat, 0) / count) : (hex.lat || 0);
+            const centerLng = count > 0 ? (points.reduce((s, p) => s + p.lng, 0) / count) : (hex.lng || 0);
+
+            // Lista dos focos individuais dentro do hex (max 5)
+            const topPoints = points.slice(0, 5).map(p => {
+                const tempC = p.temperature_k ? (p.temperature_k - 273.15).toFixed(1) : '--';
+                const sColor = p.severity === 'CRITICAL' ? 'text-red-400' : p.severity === 'INFO' ? 'text-blue-400' : 'text-green-400';
+                return `<div class="flex justify-between items-center py-0.5 border-t border-gray-700/50">
+                    <span class="${sColor} font-medium">${p.severity}</span>
+                    <span class="text-orange-300">${(p.frp || 0).toFixed(1)} MW</span>
+                    <span class="text-yellow-300">${tempC}°C</span>
+                    <span class="text-emerald-300">${p.confidence || 0}%</span>
+                </div>`;
+            }).join('');
+            const moreLabel = count > 5 ? `<div class="text-center text-gray-500 text-[10px] mt-1">+${count - 5} focos adicionais</div>` : '';
+
+            tooltipContent.innerHTML = `
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                        <div class="w-2.5 h-2.5 rounded-full ${maxSeverity === 'CRITICAL' ? 'bg-red-500 animate-pulse' : maxSeverity === 'INFO' ? 'bg-blue-500' : 'bg-green-500'}"></div>
+                        <span class="text-sm font-bold text-cyan-300">Hexbin</span>
+                        <span class="text-xs ${sevColor}">${maxSeverity}</span>
+                    </div>
+                    <button onclick="document.getElementById('tooltip').style.display='none'" class="text-gray-500 hover:text-white text-lg leading-none">&times;</button>
+                </div>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs text-gray-300 mb-2">
+                    <span class="text-gray-500">Focos Agrupados:</span><span class="text-white font-bold">${count}</span>
+                    <span class="text-gray-500">FRP Total:</span><span class="text-orange-300 font-bold">${totalFrp.toFixed(1)} MW</span>
+                    <span class="text-gray-500">FRP Max:</span><span class="text-yellow-300">${maxFrp.toFixed(1)} MW</span>
+                    <span class="text-gray-500">Severidade Max:</span><span class="${sevColor} font-medium">${maxSeverity}</span>
+                    <span class="text-gray-500">Criticos:</span><span class="text-red-400">${critCount}</span>
+                    <span class="text-gray-500">Confianca Media:</span><span class="text-emerald-300">${avgConf.toFixed(0)}%</span>
+                    <span class="text-gray-500">Centro Lat:</span><span>${centerLat.toFixed(4)}</span>
+                    <span class="text-gray-500">Centro Lng:</span><span>${centerLng.toFixed(4)}</span>
+                </div>
+                ${count > 0 ? `
+                <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Detalhes dos Focos</div>
+                <div class="flex justify-between text-[10px] text-gray-500 mb-0.5">
+                    <span>Sev.</span><span>FRP</span><span>Temp</span><span>Conf</span>
+                </div>
+                ${topPoints}
+                ${moreLabel}` : ''}
+            `;
+
+            // Posiciona o tooltip no centro da tela
+            tooltip.style.display = 'block';
+            tooltip.style.left = '50%';
+            tooltip.style.top = '50%';
+            tooltip.style.transform = 'translate(-50%, -50%)';
+            tooltip.style.pointerEvents = 'auto';
+        }
+
+        // Fecha tooltip ao clicar fora
+        document.addEventListener('click', (e) => {
+            if (tooltip.style.display === 'block' && !tooltip.contains(e.target)) {
+                tooltip.style.display = 'none';
+                tooltip.style.pointerEvents = 'none';
+            }
+        });
+
+        // ========== REGIÕES (bounding boxes: [latMin, latMax, lngMin, lngMax]) ==========
+        const REGIONS = {
+            global: null,
+            south_america: [-56, 13, -82, -34],
+            north_america: [15, 72, -170, -50],
+            africa: [-35, 37, -18, 52],
+            europe: [35, 72, -12, 45],
+            asia: [0, 75, 45, 180],
+            oceania: [-50, 5, 100, 180],
+        };
+
+        function isInRegion(d, region) {
+            if (!region) return true;
+            const [latMin, latMax, lngMin, lngMax] = region;
+            return d.lat >= latMin && d.lat <= latMax && d.lng >= lngMin && d.lng <= lngMax;
+        }
+
+        // ========== FILTRAGEM CENTRAL ==========
+        function applyFilters() {
+            const showCritical = cbCritical.checked;
+            const showInfo = cbInfo.checked;
+            const showLow = cbLow.checked;
+            const showHeat = document.getElementById('cb-heat').checked;
+            const showCold = document.getElementById('cb-cold').checked;
+            const minConf = parseInt(sliderConf.value);
+            const minFrp = parseInt(sliderFrp.value);
+            const regionKey = document.getElementById('region-filter').value;
+            const region = REGIONS[regionKey];
+
+            filteredData = rawData.filter(d => {
+                if (!isInRegion(d, region)) return false;
+                // Filtro térmico (calor/frio)
+                const type = d.thermal_type || 'heat';
+                if (type === 'heat' && !showHeat) return false;
+                if (type === 'cold' && !showCold) return false;
+                if (d.severity === 'CRITICAL' && !showCritical) return false;
+                if (d.severity === 'INFO' && !showInfo) return false;
+                if (d.severity === 'LOW' && !showLow) return false;
+                if ((d.confidence || 0) < minConf) return false;
+                if ((d.frp || 0) < minFrp) return false;
+                return true;
+            });
+
+            // Atualiza hexbins
+            globe.hexBinPointsData(filteredData);
+
+            // Atualiza KPIs com dados filtrados
+            const critCount = filteredData.filter(d => d.severity === 'CRITICAL').length;
+            const maxFrp = filteredData.length > 0 ? Math.max(...filteredData.map(d => d.frp || 0)) : 0;
+            const avgConf = filteredData.length > 0 ? (filteredData.reduce((s, d) => s + (d.confidence || 0), 0) / filteredData.length) : 0;
+
+            document.getElementById('kpi-total').textContent = filteredData.length;
+            document.getElementById('kpi-critical').textContent = critCount;
+            document.getElementById('kpi-frp').textContent = maxFrp.toFixed(1) + ' MW';
+            document.getElementById('kpi-conf').textContent = avgConf.toFixed(0) + '%';
+        }
+
+        // ========== HEX RADIUS DINAMICO ==========
+        function updateHexRadius() {
+            const val = parseInt(sliderHexRadius.value);
+            hexRadiusValue.textContent = (val / 10).toFixed(1);
+            globe.hexBinResolution(val);
+            applyFilters();
+        }
+
+
+        // ========== EXPORTACAO PDF ==========
+        function exportarRelatorioPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a4');
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const now = new Date().toLocaleString('pt-BR');
+
+            // Cabecalho
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Relatorio de Monitoramento', pageWidth / 2, 20, { align: 'center' });
+            doc.setFontSize(12);
+            doc.text('Sentinela Ambiental (MaaS)', pageWidth / 2, 28, { align: 'center' });
+
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100);
+            doc.text(`Gerado em: ${now}`, pageWidth / 2, 34, { align: 'center' });
+            doc.setTextColor(0);
+
+            // Linha separadora
+            doc.setDrawColor(200);
+            doc.line(14, 37, pageWidth - 14, 37);
+
+            // Paragrafo explicativo
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            const descText = 'Este relatorio apresenta dados de anomalias termicas e focos de calor capturados pela API FIRMS da NASA e processados pelo subsistema Sentinela Ambiental. Os dados representam eventos filtrados de acordo com severidade, nivel de confianca e Potencia Radiativa do Fogo (FRP).';
+            const splitDesc = doc.splitTextToSize(descText, pageWidth - 28);
+            doc.text(splitDesc, 14, 43);
+
+            // Resumo estatistico
+            const critCount = filteredData.filter(d => d.severity === 'CRITICAL').length;
+            const maxFrp = filteredData.length > 0 ? Math.max(...filteredData.map(d => d.frp || 0)) : 0;
+            const avgConf = filteredData.length > 0 ? (filteredData.reduce((s, d) => s + (d.confidence || 0), 0) / filteredData.length) : 0;
+
+            let yPos = 58;
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Resumo Estatistico (Filtros Atuais)', 14, yPos);
+            yPos += 7;
+
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Total de Focos Filtrados: ${filteredData.length}`, 14, yPos); yPos += 5;
+            doc.text(`Focos Criticos: ${critCount}`, 14, yPos); yPos += 5;
+            doc.text(`Pico de FRP: ${maxFrp.toFixed(1)} MW`, 14, yPos); yPos += 5;
+            doc.text(`Confianca Media: ${avgConf.toFixed(1)}%`, 14, yPos); yPos += 5;
+            doc.text(`Janela Temporal: ${document.getElementById('hours-filter').value}h`, 14, yPos); yPos += 10;
+
+            // Tabela com top 100 focos criticos (ordenados por FRP desc)
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Top 100 Focos (por FRP)', 14, yPos);
+            yPos += 4;
+
+            const sorted = [...filteredData]
+                .sort((a, b) => (b.frp || 0) - (a.frp || 0))
+                .slice(0, 100);
+
+            const tableData = sorted.map(d => [
+                d.timestamp || '--',
+                d.lat ? d.lat.toFixed(4) : '--',
+                d.lng ? d.lng.toFixed(4) : '--',
+                (d.frp || 0).toFixed(1),
+                d.severity || '--',
+                (d.confidence || 0) + '%'
+            ]);
+
+            doc.autoTable({
+                startY: yPos,
+                head: [['Data/Hora', 'Latitude', 'Longitude', 'FRP (MW)', 'Severidade', 'Confianca']],
+                body: tableData,
+                theme: 'grid',
+                headStyles: { fillColor: [30, 58, 95], fontSize: 8, halign: 'center' },
+                bodyStyles: { fontSize: 7, halign: 'center' },
+                alternateRowStyles: { fillColor: [245, 245, 250] },
+                margin: { left: 14, right: 14 },
+                styles: { cellPadding: 2 }
+            });
+
+            // Rodape
+            const finalY = doc.lastAutoTable.finalY || 200;
+            doc.setFontSize(7);
+            doc.setTextColor(150);
+            doc.text('Sentinela Ambiental - MaaS (Memory as a Service) | NASA FIRMS | Projeto Integrador III - FAESA', pageWidth / 2, finalY + 10, { align: 'center' });
+
+            doc.save(`sentinela_relatorio_${Date.now()}.pdf`);
+        }
+
+        document.getElementById('btn-export-pdf').addEventListener('click', exportarRelatorioPDF);
+
+        // ========== EVENT LISTENERS (REATIVIDADE) ==========
+        sliderConf.addEventListener('input', () => {
+            confValue.textContent = sliderConf.value + '%';
+            applyFilters();
+        });
+        sliderFrp.addEventListener('input', () => {
+            frpValue.textContent = sliderFrp.value + ' MW';
+            applyFilters();
+        });
+        sliderHexRadius.addEventListener('input', updateHexRadius);
+
+        cbCritical.addEventListener('change', applyFilters);
+        cbInfo.addEventListener('change', applyFilters);
+        cbLow.addEventListener('change', applyFilters);
+        document.getElementById('cb-heat').addEventListener('change', applyFilters);
+        document.getElementById('cb-cold').addEventListener('change', applyFilters);
+
+        // Região: filtra + move câmera
+        const REGION_VIEWS = {
+            global: { lat: 20, lng: 0, altitude: 2.5 },
+            south_america: { lat: -15, lng: -55, altitude: 1.8 },
+            north_america: { lat: 40, lng: -100, altitude: 1.8 },
+            africa: { lat: 5, lng: 20, altitude: 1.8 },
+            europe: { lat: 50, lng: 15, altitude: 1.6 },
+            asia: { lat: 35, lng: 100, altitude: 1.8 },
+            oceania: { lat: -25, lng: 135, altitude: 1.8 },
+        };
+        document.getElementById('region-filter').addEventListener('change', (e) => {
+            const view = REGION_VIEWS[e.target.value];
+            globe.pointOfView(view, 1000);
+            applyFilters();
+        });
+
+        // ========== FETCH DE DADOS ==========
+        async function loadAlerts() {
+            const hours = document.getElementById('hours-filter').value;
+            try {
+                const res = await fetch(`/api/alerts?hours=${hours}`);
+                const data = await res.json();
+                rawData = data.alerts || [];
+                applyFilters();
+            } catch (err) {
+                console.error('Erro ao carregar alertas:', err);
+            }
+        }
+
+        // Carrega ao iniciar e a cada 30s
+        loadAlerts();
+        setInterval(loadAlerts, 30000);
+
+        // Recarrega ao mudar janela temporal
+        document.getElementById('hours-filter').addEventListener('change', loadAlerts);
+
+        // Responsividade
+        window.addEventListener('resize', () => {
+            globe.width(window.innerWidth);
+            globe.height(window.innerHeight);
+        });
+    })();
+    </script>
+</body>
+</html>

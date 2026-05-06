@@ -28,6 +28,17 @@ service MemoryService {
     // Permite que clientes remotos (como na nuvem) acessem a RAM física do provedor.
     rpc WriteMemory(WriteRequest) returns (Acknowledge);
     rpc ReadMemory(ReadRequest) returns (ReadResponse);
+    // [NOVO] Healthcheck do servidor
+    rpc CheckHealth(Empty) returns (HealthCheckResponse);
+}
+
+// ----------------------------------------------------------------------------
+// Mensagens de Healthcheck
+// ----------------------------------------------------------------------------
+message Empty {}
+
+message HealthCheckResponse {
+    string status = 1;
 }
 
 // ----------------------------------------------------------------------------

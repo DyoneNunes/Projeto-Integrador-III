@@ -15,17 +15,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Definir o diretório de trabalho no container
 WORKDIR /app
 
-# Copiar apenas o arquivo de requisitos primeiro para aproveitar o cache do Docker
-COPY requirements.txt .
+# 1. Pacotes leves (rápido, nunca falha)
+RUN pip install --no-cache-dir --timeout=120 \
+    python-dotenv==1.0.1 \
+    grpcio==1.62.0 \
+    grpcio-tools==1.62.0 \
+    psycopg2-binary==2.9.9 \
+    requests==2.31.0 \
+    posix_ipc==1.1.1 \
+    fastapi==0.111.0 \
+    uvicorn==0.30.1
 
-# Instalar as dependências do Python
-RUN pip install --no-cache-dir -r requirements.txt
+# 2. Pacotes ML (LightGBM ~2MB, leve e rápido)
+RUN pip install --no-cache-dir --timeout=120 \
+    numpy==1.26.4 \
+    scikit-learn==1.4.2 \
+    lightgbm==4.3.0
 
 # Copiar o restante do código fonte do projeto
 COPY . .
 
 # Gerar stubs gRPC Python a partir do proto (montado em /app/proto via volume)
-# O script de entrypoint executa a geração em runtime para usar o proto montado
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 

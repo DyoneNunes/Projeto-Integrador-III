@@ -689,6 +689,18 @@ public:
         return grpc::Status::OK;
     }
 
+    // -------------------------------------------------------------------------
+    // CheckHealth — [NOVO] Healthcheck do servidor
+    // -------------------------------------------------------------------------
+    grpc::Status CheckHealth(
+        grpc::ServerContext* /*ctx*/,
+        const maas::Empty* /*req*/,
+        maas::HealthCheckResponse* resp
+    ) override {
+        resp->set_status("SERVING");
+        return grpc::Status::OK;
+    }
+
 private:
     ShmManager&     shm_;
     DatabaseClient& db_;

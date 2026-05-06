@@ -63,3 +63,18 @@ CREATE TABLE IF NOT EXISTS sentinela_ambiental.alerts_history (
     description TEXT,
     detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Tabela de Predições da IA (LightGBM)
+CREATE TABLE IF NOT EXISTS sentinela_ambiental.ai_predictions (
+    id SERIAL PRIMARY KEY,
+    reading_id INT UNIQUE REFERENCES sentinela_ambiental.sensor_readings(id),
+    model_version VARCHAR(50) NOT NULL,
+    prediction_class INT NOT NULL,
+    prediction_probability DOUBLE PRECISION NOT NULL,
+    urgency_score DOUBLE PRECISION,
+    predicted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices de performance
+CREATE INDEX IF NOT EXISTS idx_sensor_readings_timestamp
+ON sentinela_ambiental.sensor_readings(reading_timestamp DESC);

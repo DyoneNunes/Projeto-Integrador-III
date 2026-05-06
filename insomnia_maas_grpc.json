@@ -1,0 +1,124 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-04-30T00:00:00.000Z",
+  "__export_source": "insomnia.desktop.app:v8.0.0",
+  "resources": [
+    {
+      "_id": "wrk_1",
+      "parentId": null,
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "name": "MaaS gRPC API",
+      "description": "Colet\u00e2nea de testes para o Projeto Integrador III - Memory as a Service (MaaS)",
+      "scope": "collection",
+      "_type": "workspace"
+    },
+    {
+      "_id": "env_1",
+      "parentId": "wrk_1",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "name": "Base Environment",
+      "data": {
+        "grpc_url": "127.0.0.1:50051",
+        "tenant_id": "11111111-1111-1111-1111-111111111111",
+        "allocation_id": "COLOQUE_O_ID_AQUI"
+      },
+      "_type": "environment"
+    },
+    {
+      "_id": "pf_1",
+      "parentId": "wrk_1",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "name": "maas.proto",
+      "protoText": "// =============================================================================\n// PROJETO MaaS (Memory as a Service) - PI-III 5\u00ba PER\u00cdODO TADS FAESA\n// Defini\u00e7\u00e3o do servi\u00e7o gRPC para gerenciamento de mem\u00f3ria compartilhada\n// =============================================================================\n\nsyntax = \"proto3\";\n\npackage maas;\n\noption cc_enable_arenas = true;\n\n// ----------------------------------------------------------------------------\n// Servi\u00e7o principal de gerenciamento de mem\u00f3ria\n// ----------------------------------------------------------------------------\nservice MemoryService {\n    // Aloca um bloco de mem\u00f3ria compartilhada para um tenant.\n    // Retorna a chave SHM e o offset para acesso direto via mmap.\n    rpc Allocate(AllocateRequest) returns (AllocateResponse);\n\n    // Libera um bloco de mem\u00f3ria previamente alocado.\n    rpc Deallocate(DeallocateRequest) returns (DeallocateResponse);\n\n    // Stream de m\u00e9tricas de observabilidade (lat\u00eancia, uso, press\u00e3o).\n    // O client envia um fluxo cont\u00ednuo de m\u00e9tricas e recebe um ACK final.\n    rpc ReportMetrics(stream MetricsReport) returns (Acknowledge);\n\n    // [NOVO] Opera\u00e7\u00f5es de I/O de Mem\u00f3ria via Rede\n    // Permite que clientes remotos (como na nuvem) acessem a RAM f\u00edsica do provedor.\n    rpc WriteMemory(WriteRequest) returns (Acknowledge);\n    rpc ReadMemory(ReadRequest) returns (ReadResponse);\n    // [NOVO] Healthcheck do servidor\n    rpc CheckHealth(Empty) returns (HealthCheckResponse);\n}\n\n// ----------------------------------------------------------------------------\n// Mensagens de Healthcheck\n// ----------------------------------------------------------------------------\nmessage Empty {}\n\nmessage HealthCheckResponse {\n    string status = 1;\n}\n\n// ----------------------------------------------------------------------------\n// Mensagens de Aloca\u00e7\u00e3o\n// ----------------------------------------------------------------------------\nmessage AllocateRequest {\n    string tenant_id = 1;   // UUID do tenant solicitante\n    int64  size_bytes = 2;  // Tamanho em bytes do bloco requisitado\n}\n\nmessage AllocateResponse {\n    string allocation_id = 1;  // UUID da aloca\u00e7\u00e3o criada\n    string shm_key       = 2;  // Chave de shared memory do Linux (/dev/shm)\n    int64  offset        = 3;  // Offset em bytes dentro da regi\u00e3o mapeada\n}\n\nmessage DeallocateRequest {\n    string allocation_id = 1;\n}\n\nmessage DeallocateResponse {\n    bool   success = 1;\n    string message = 2;\n}\n\n// ----------------------------------------------------------------------------\n// Mensagens de M\u00e9tricas\n// ----------------------------------------------------------------------------\nmessage MetricsReport {\n    string tenant_id     = 1;\n    string allocation_id = 2;\n    string node_id       = 3;\n    int64  timestamp_us  = 4;  // Timestamp em microsegundos (CLOCK_MONOTONIC)\n    double rtt_ms        = 5;  // Round-Trip Time em milissegundos\n    double memory_pressure    = 6;  // Press\u00e3o de mem\u00f3ria do n\u00f3 [0.0, 1.0]\n    double cache_hit_ratio    = 7;  // Taxa de acerto de cache [0.0, 1.0]\n    double net_bottleneck_score = 8;\n}\n\nmessage Acknowledge {\n    int64  metrics_received = 1;\n    string message          = 2;\n}\n\n// ----------------------------------------------------------------------------\n// Mensagens de I/O Remoto\n// ----------------------------------------------------------------------------\nmessage WriteRequest {\n    string allocation_id = 1;\n    int64  offset        = 2;\n    bytes  data          = 3; // Payload bin\u00e1rio (m\u00e1x 4MB recomendado por gRPC)\n}\n\nmessage ReadRequest {\n    string allocation_id = 1;\n    int64  offset        = 2;\n    int64  size_bytes    = 3;\n}\n\nmessage ReadResponse {\n    bytes  data          = 1;\n}\n",
+      "_type": "protofile"
+    },
+    {
+      "_id": "greq_0",
+      "parentId": "wrk_1",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "name": "0. CheckHealth (Status do Servidor)",
+      "url": "{{ _.grpc_url }}",
+      "protoFileId": "pf_1",
+      "protoMethodName": "/maas.MemoryService/CheckHealth",
+      "body": {
+        "text": "{}"
+      },
+      "_type": "grpc_request"
+    },
+    {
+      "_id": "greq_1",
+      "parentId": "wrk_1",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "name": "1. Allocate (Alocar Mem\u00f3ria)",
+      "url": "{{ _.grpc_url }}",
+      "protoFileId": "pf_1",
+      "protoMethodName": "/maas.MemoryService/Allocate",
+      "body": {
+        "text": "{\n  \"tenant_id\": \"{{ _.tenant_id }}\",\n  \"size_bytes\": 1048576\n}"
+      },
+      "_type": "grpc_request"
+    },
+    {
+      "_id": "greq_2",
+      "parentId": "wrk_1",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "name": "2. WriteMemory (Escrever na Mem\u00f3ria)",
+      "url": "{{ _.grpc_url }}",
+      "protoFileId": "pf_1",
+      "protoMethodName": "/maas.MemoryService/WriteMemory",
+      "body": {
+        "text": "{\n  \"allocation_id\": \"{{ _.allocation_id }}\",\n  \"offset\": 0,\n  \"data\": \"SGVsbG8gTWFhUyEgVGVzdGFuZG8gZ1JQQw==\" \n}"
+      },
+      "_type": "grpc_request"
+    },
+    {
+      "_id": "greq_3",
+      "parentId": "wrk_1",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "name": "3. ReadMemory (Ler da Mem\u00f3ria)",
+      "url": "{{ _.grpc_url }}",
+      "protoFileId": "pf_1",
+      "protoMethodName": "/maas.MemoryService/ReadMemory",
+      "body": {
+        "text": "{\n  \"allocation_id\": \"{{ _.allocation_id }}\",\n  \"offset\": 0,\n  \"size_bytes\": 30\n}"
+      },
+      "_type": "grpc_request"
+    },
+    {
+      "_id": "greq_4",
+      "parentId": "wrk_1",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "name": "4. Deallocate (Liberar Mem\u00f3ria)",
+      "url": "{{ _.grpc_url }}",
+      "protoFileId": "pf_1",
+      "protoMethodName": "/maas.MemoryService/Deallocate",
+      "body": {
+        "text": "{\n  \"allocation_id\": \"{{ _.allocation_id }}\"\n}"
+      },
+      "_type": "grpc_request"
+    },
+    {
+      "_id": "greq_5",
+      "parentId": "wrk_1",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "name": "5. ReportMetrics (Enviar M\u00e9tricas)",
+      "url": "{{ _.grpc_url }}",
+      "protoFileId": "pf_1",
+      "protoMethodName": "/maas.MemoryService/ReportMetrics",
+      "body": {
+        "text": "{\n  \"tenant_id\": \"{{ _.tenant_id }}\",\n  \"allocation_id\": \"{{ _.allocation_id }}\",\n  \"node_id\": \"00000000-0000-0000-0000-000000000001\",\n  \"timestamp_us\": 1700000000000,\n  \"rtt_ms\": 2.5,\n  \"memory_pressure\": 0.4,\n  \"cache_hit_ratio\": 0.98,\n  \"net_bottleneck_score\": 0.05\n}"
+      },
+      "_type": "grpc_request"
+    }
+  ]
+}

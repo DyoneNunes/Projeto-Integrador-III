@@ -24,6 +24,9 @@ services:
     build: .
     container_name: sentinela_ingestor
     restart: always
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     depends_on:
       db:
         condition: service_healthy
@@ -57,6 +60,26 @@ services:
       - maas-network
     command: python src/data_processor.py
 
+  ai_processor:
+    build: .
+    container_name: sentinela_ai
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      processor:
+        condition: service_started
+    env_file:
+      - .env
+    volumes:
+      - /dev/shm:/dev/shm
+      - ../proto:/app/proto:ro
+      - ./src:/app/src
+      - ./models:/app/models:ro
+    networks:
+      - maas-network
+    command: python src/ai_processor.py
+
   dashboard:
     build: .
     container_name: sentinela_dashboard
@@ -67,14 +90,14 @@ services:
     env_file:
       - .env
     volumes:
-      - /dev/shm:/dev/shm
       - ../proto:/app/proto:ro
       - ./src:/app/src
+      - ./static:/app/static:ro
     ports:
-      - "8501:8501"
+      - "8000:8000"
     networks:
       - maas-network
-    command: streamlit run src/dashboard.py --server.address=0.0.0.0
+    command: uvicorn src.api:app --host 0.0.0.0 --port 8000
 
 networks:
   maas-network:
