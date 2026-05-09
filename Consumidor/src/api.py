@@ -37,20 +37,24 @@ def get_alerts(hours: int = Query(default=24, ge=1, le=168)):
     JOIN entre sensor_readings e alerts_history.
     """
     query = """
-        SELECT DISTINCT ON (ROUND(sr.latitude::numeric, 3), ROUND(sr.longitude::numeric, 3))
-            sr.latitude AS lat,
-            sr.longitude AS lng,
-            sr.frp,
-            sr.temperature_k,
-            sr.confidence,
-            sr.satellite_type,
-            ah.severity,
-            ah.alert_type,
-            sr.reading_timestamp
-        FROM sentinela_ambiental.sensor_readings sr
-        JOIN sentinela_ambiental.alerts_history ah ON sr.id = ah.reading_id
-        WHERE sr.reading_timestamp >= NOW() - INTERVAL '%s hours'
-        ORDER BY ROUND(sr.latitude::numeric, 3), ROUND(sr.longitude::numeric, 3), sr.reading_timestamp DESC
+        WITH dedup AS (
+            SELECT DISTINCT ON (ROUND(sr.latitude::numeric, 3), ROUND(sr.longitude::numeric, 3))
+                sr.latitude AS lat,
+                sr.longitude AS lng,
+                sr.frp,
+                sr.temperature_k,
+                sr.confidence,
+                sr.satellite_type,
+                ah.severity,
+                ah.alert_type,
+                sr.reading_timestamp
+            FROM sentinela_ambiental.sensor_readings sr
+            JOIN sentinela_ambiental.alerts_history ah ON sr.id = ah.reading_id
+            WHERE sr.reading_timestamp >= NOW() - INTERVAL '%s hours'
+            ORDER BY ROUND(sr.latitude::numeric, 3), ROUND(sr.longitude::numeric, 3), sr.reading_timestamp DESC
+        )
+        SELECT * FROM dedup
+        ORDER BY reading_timestamp DESC
         LIMIT 5000
     """
     conn = None

@@ -188,7 +188,6 @@ def process_data():
                 last_offset += RECORD_SIZE
                 if last_offset >= buffer_size:
                     last_offset = 0
-                    processed_ids.clear() 
 
                 if record_id == 0 or record_id in processed_ids:
                     continue
@@ -227,10 +226,16 @@ def process_data():
                         cursor.execute("""
                             INSERT INTO sentinela_ambiental.sensor_readings
                             (sensor_id, latitude, longitude, temperature_k, frp, satellite_type, confidence)
-                            VALUES (1, %s, %s, %s, %s, %s, %s) RETURNING id;
+                            VALUES (1, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (ROUND(latitude::numeric, 3), ROUND(longitude::numeric, 3), ROUND(temperature_k::numeric, 1))
+                            DO NOTHING
+                            RETURNING id;
                         """, (r[0], r[1], r[2], r[3], r[5], r[4]))
 
-                        reading_id = cursor.fetchone()[0]
+                        row = cursor.fetchone()
+                        if row is None:
+                            continue  # Duplicata, pula alert e feature
+                        reading_id = row[0]
 
                         # Inserção no histórico
                         cursor.execute("""

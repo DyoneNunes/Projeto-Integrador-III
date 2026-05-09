@@ -49,6 +49,31 @@ def get_or_create_tenant() -> str:
             time.sleep(3)
     raise RuntimeError("Falha ao registrar tenant no banco MaaS.")
 
+def release_old_allocations(stub, tenant_id: str):
+    """Libera alocações anteriores deste tenant no MaaS antes de alocar novas."""
+    try:
+        conn = psycopg2.connect(MAAS_DB_URL)
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT allocation_id FROM public.memoryallocation WHERE tenant_id = %s AND state = 'active'",
+                (tenant_id,)
+            )
+            rows = cur.fetchall()
+        conn.close()
+
+        for row in rows:
+            alloc_id = str(row[0])
+            try:
+                req = maas_pb2.DeallocateRequest(allocation_id=alloc_id)
+                stub.Deallocate(req, timeout=5)
+                print(f"[+] Alocação anterior liberada: {alloc_id}")
+            except Exception as e:
+                print(f"[-] Falha ao liberar {alloc_id}: {e}")
+    except Exception as e:
+        print(f"[-] Erro ao buscar alocações antigas: {e}")
+
+
 def perform_maas_handshake(tenant_id: str) -> dict:
     print(f"[*] Iniciando Handshake gRPC com MaaS em {MAAS_GRPC_HOST}...")
     retries = 10
@@ -56,6 +81,10 @@ def perform_maas_handshake(tenant_id: str) -> dict:
         try:
             channel = grpc.insecure_channel(MAAS_GRPC_HOST)
             stub = maas_pb2_grpc.MemoryServiceStub(channel)
+
+            # Libera alocações anteriores antes de criar nova
+            release_old_allocations(stub, tenant_id)
+
             request = maas_pb2.AllocateRequest(tenant_id=tenant_id, size_bytes=MAAS_BUFFER_SIZE)
             response = stub.Allocate(request, timeout=10)
             result = {"allocation_id": response.allocation_id, "shm_key": response.shm_key, "offset": response.offset}
@@ -74,13 +103,21 @@ def get_remote_memory(stub, allocation_id: str, size: int) -> MaaSMemory:
 def fetch_nasa_firms_data() -> list[dict]:
     """Busca dados globais de múltiplos sensores NASA FIRMS (calor + frio)."""
     data = []
-    # Regiões globais (bounding boxes: west,south,east,north)
+    # Cobertura global completa: 8 octantes contíguos (90° x 90°) +
+    # 2 faixas polares. Garante que nenhuma região terrestre fique
+    # sem amostragem (formato bbox: west,south,east,north).
     bboxes = [
-        ("-75,-35,-34,6"),     # América do Sul
-        ("-130,24,-65,50"),    # América do Norte
-        ("-20,-35,55,40"),     # África + Europa Sul
-        ("55,-10,155,55"),     # Ásia + Oceania
-        ("90,50,180,75"),      # Sibéria/Leste
+        # Hemisfério Norte (lat 0 -> 60)
+        ("-180,0,-90,60"),     # NW: Pacífico + Alasca + AmNorte oeste
+        ("-90,0,0,60"),        # NE central-oeste: AmNorte leste + Caribe + Atlântico Norte
+        ("0,0,90,60"),         # NE central-leste: Europa + África norte + Oriente Médio
+        ("90,0,180,60"),       # NE leste: Ásia + Sibéria sul
+        # Hemisfério Sul (lat -60 -> 0)
+        ("-180,-60,-90,0"),    # SW: Pacífico Sul + AmSul oeste (Peru, Chile)
+        ("-90,-60,0,0"),       # SE central-oeste: AmSul (Brasil, Argentina, Patagônia) + Atlântico Sul
+        ("0,-60,90,0"),        # SE central-leste: África subsaariana + Oceano Índico oeste
+        ("90,-60,180,0"),      # SE leste: Indonésia + Austrália + NZ + Pacífico Sul
+        # Faixas polares
         ("-180,60,180,85"),    # Ártico
         ("-180,-85,180,-60"),  # Antártico
     ]
