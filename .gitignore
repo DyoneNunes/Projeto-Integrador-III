@@ -28,9 +28,13 @@ dashboard/src/generated/
 .env
 .env.*
 keySentinela
+credentials/*.json
 
 # Docker
 pgdata/
+
+# MkDocs build output
+site/
 
 # OS
 .DS_Store
