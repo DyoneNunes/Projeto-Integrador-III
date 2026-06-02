@@ -12,6 +12,8 @@
     "@grpc/proto-loader": "^0.8.0",
     "@prisma/adapter-pg": "^7.6.0",
     "@prisma/client": "^7.6.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.468.0",
     "next": "^14.2.21",
     "pg": "^8.13.1",

@@ -9,6 +9,7 @@ import {
 import Link from "next/link";
 import prisma from "@/lib/prisma";
 import AllocateModal from "@/components/AllocateModal";
+import ReportModal from "@/components/ReportModal";
 import TopTenantsChart from "@/components/TopTenantsChart";
 import RefreshButton from "@/components/RefreshButton";
 import AutoRefresh from "@/components/AutoRefresh";
@@ -142,6 +143,7 @@ export default async function DashboardPage() {
             <Key className="h-4 w-4 text-amber-400" />
             Tenants
           </Link>
+          <ReportModal />
           <AllocateModal />
         </div>
       </header>
