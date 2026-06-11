@@ -27,6 +27,9 @@ O ecossistema é exercitado por um caso de uso na área de **Meio Ambiente**: o 
 ### Video no youtube
 - **Link:** https://youtu.be/x8Hn4Qob_7I
 
+- <img width="1024" height="572" alt="image" src="https://github.com/user-attachments/assets/447ea2f0-ec95-4086-99ec-8f35345112d4" />
+
+
 ---
 
 ## 🧭 Visão Geral da Arquitetura
