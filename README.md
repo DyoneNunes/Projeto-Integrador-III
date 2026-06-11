@@ -24,6 +24,9 @@ Projeto da Unidade Curricular **Projeto Integrador Computação III** (5º Perí
 ### Tema e impacto social
 O ecossistema é exercitado por um caso de uso na área de **Meio Ambiente**: o módulo **Sentinela Ambiental** ingere e processa dados térmicos de satélites (NASA FIRMS) em alta velocidade usando a RAM alugada do MaaS, gerando alertas geolocalizados de focos de calor úteis à **Defesa Civil**, **Corpo de Bombeiros** e **Secretarias de Meio Ambiente**.
 
+### Video no youtube
+- **Link:** https://youtu.be/x8Hn4Qob_7I
+
 ---
 
 ## 🧭 Visão Geral da Arquitetura
