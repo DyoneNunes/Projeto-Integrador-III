@@ -9,3 +9,5 @@ uvicorn==0.30.1
 lightgbm==4.3.0
 numpy==1.26.4
 scikit-learn==1.4.2
+earthengine-api==0.1.383
+google-auth==2.36.0

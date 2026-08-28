@@ -78,3 +78,12 @@ CREATE TABLE IF NOT EXISTS sentinela_ambiental.ai_predictions (
 -- Índices de performance
 CREATE INDEX IF NOT EXISTS idx_sensor_readings_timestamp
 ON sentinela_ambiental.sensor_readings(reading_timestamp DESC);
+
+-- Índice único para suporte ao ON CONFLICT DO NOTHING do data_processor
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sensor_readings_unique_coords
+ON sentinela_ambiental.sensor_readings (
+    ROUND(latitude::numeric, 3), 
+    ROUND(longitude::numeric, 3), 
+    ROUND(temperature_k::numeric, 1)
+);
+

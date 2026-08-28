@@ -156,6 +156,7 @@ def process_data():
 
     channel = grpc.insecure_channel(MAAS_GRPC_HOST)
     stub = maas_pb2_grpc.MemoryServiceStub(channel)
+
     mm = get_remote_memory(stub, alloc_id, buffer_size)
 
     # Obtém tenant_id real e aloca Buffer B (mesmo método do Buffer A)
@@ -277,6 +278,12 @@ def process_data():
 
         except Exception as e:
             print(f"[-] Erro crítico: {e}")
+            if conn and not conn.closed:
+                try:
+                    conn.rollback()
+                    print("[*] Transação do banco de dados revertida (rollback) após erro.")
+                except Exception as db_err:
+                    print(f"[-] Erro ao realizar rollback no banco: {db_err}")
             time.sleep(5)
             try:
                 channel.close()

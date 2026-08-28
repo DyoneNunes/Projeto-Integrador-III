@@ -28,7 +28,7 @@ dashboard/src/generated/
 .env
 .env.*
 keySentinela
-credentials/*.json
+**/credentials/*.json
 
 # Docker
 pgdata/

@@ -32,6 +32,11 @@ RUN pip install --no-cache-dir --timeout=120 \
     scikit-learn==1.4.2 \
     lightgbm==4.3.0
 
+# 3. Google Earth Engine (processamento remoto, sem download de dados)
+RUN pip install --no-cache-dir --timeout=120 \
+    earthengine-api==0.1.383 \
+    google-auth==2.36.0
+
 # Copiar o restante do código fonte do projeto
 COPY . .
 

@@ -1,21 +1,31 @@
 """
 Sentinela Ambiental - API REST (FastAPI)
-Serve os dados de alertas térmicos e o frontend 3D.
+Serve os dados de alertas térmicos, camadas GEE e o frontend 3D.
+
+DOUTRINA MaaS: O backend NAO aloca matrizes geoespaciais em RAM local.
+Processamento pesado e delegado ao Google Earth Engine (servidores remotos).
+FastAPI apenas roteia instrucoes e devolve escalares/URLs.
 """
 import os
+import asyncio
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 
 import psycopg2
 import psycopg2.extras
+import requests as http_requests
 from fastapi import FastAPI, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel
 from dotenv import load_dotenv
 
 load_dotenv()
 
 DB_CONNECTION = os.getenv("DB_CONNECTION")
+
+# Flag de disponibilidade do GEE (graceful degradation)
+_gee_available = False
 
 def get_db():
     """Retorna conexão com o PostgreSQL."""
@@ -24,6 +34,14 @@ def get_db():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _gee_available
+    try:
+        from . import gee_service
+        gee_service.initialize_gee()
+        _gee_available = True
+        print("[+] GEE disponivel - endpoints /api/gee/* ativos.")
+    except Exception as e:
+        print(f"[!] GEE indisponivel ({e}). Endpoints /api/gee/* retornarao erro.")
     yield
 
 
@@ -173,6 +191,161 @@ def get_predictions(hours: int = Query(default=24, ge=1, le=168)):
         if conn:
             conn.close()
 
+
+# ==================== GEE ENDPOINTS ====================
+
+@app.get("/api/gee/camada-termica")
+async def get_thermal_layer(
+    dataset: str = Query(default="modis", pattern="^(modis|landsat)$"),
+    days: int = Query(default=7, ge=1, le=90),
+    bbox: str = Query(default=None),
+):
+    """
+    Retorna tile URL do Google Earth Engine para camada termica.
+    Processamento ocorre no Google - nenhum dado bruto e baixado.
+
+    bbox opcional: "west,south,east,north" para Landsat (necessario para performance).
+    """
+    if not _gee_available:
+        return {
+            "error": "Google Earth Engine nao configurado. Verifique GOOGLE_APPLICATION_CREDENTIALS.",
+            "available": False,
+        }
+
+    try:
+        from . import gee_service
+
+        if dataset == "landsat":
+            parsed_bbox = None
+            if bbox:
+                parsed_bbox = [float(x) for x in bbox.split(",")]
+            result = await asyncio.to_thread(
+                gee_service.get_landsat_thermal_layer, days=days, bbox=parsed_bbox
+            )
+        else:
+            result = await asyncio.to_thread(gee_service.get_modis_lst_layer, days=days)
+
+        return {"available": True, **result}
+
+    except Exception as e:
+        return {"available": False, "error": str(e)}
+
+
+class AnaliseRegionalRequest(BaseModel):
+    """Payload para analise termica regional."""
+    bbox: list[float]  # [west, south, east, north]
+    days: int = 7
+
+
+@app.post("/api/gee/analise/temperatura")
+async def analyze_temperature(req: AnaliseRegionalRequest):
+    """
+    Analise termica regional com estatisticas e camada de anomalia.
+
+    DOUTRINA MaaS:
+    - FastAPI apenas monta a instrucao e envia ao GEE
+    - GEE processa na RAM dos servidores Google (reduceRegion, getMapId)
+    - Retorno: escalares (media, max, min, anomalia%) + URLs de tiles
+    - Zero alocacao de arrays/rasters em memoria local
+    """
+    if not _gee_available:
+        return {
+            "error": "Google Earth Engine nao configurado.",
+            "available": False,
+        }
+
+    if len(req.bbox) != 4:
+        return {"error": "bbox deve ter 4 valores: [west, south, east, north]", "available": False}
+
+    try:
+        from . import gee_service
+
+        # Executa em thread separada para nao bloquear o event loop do Uvicorn
+        result = await asyncio.to_thread(
+            gee_service.analyze_thermal_region,
+            bbox=req.bbox,
+            days=max(1, min(req.days, 90)),
+        )
+
+        return {"available": True, **result}
+
+    except Exception as e:
+        return {"available": False, "error": str(e)}
+
+
+class AnaliseVegetacaoRequest(BaseModel):
+    """Payload para analise de vegetacao regional."""
+    bbox: list[float]  # [west, south, east, north]
+    days: int = 30
+
+
+@app.post("/api/gee/analise/vegetacao")
+async def analyze_vegetation(req: AnaliseVegetacaoRequest):
+    """
+    Analise de saude da vegetacao (NDVI) regional via Landsat 8.
+
+    DOUTRINA MaaS:
+    - FastAPI apenas monta a instrucao e envia ao GEE
+    - GEE calcula normalizedDifference(['B5', 'B4']) nos servidores Google
+    - reduceRegion() retorna apenas escalares (media, max, min NDVI)
+    - Zero alocacao de arrays/rasters em memoria local
+    """
+    if not _gee_available:
+        return {
+            "error": "Google Earth Engine nao configurado.",
+            "available": False,
+        }
+
+    if len(req.bbox) != 4:
+        return {"error": "bbox deve ter 4 valores: [west, south, east, north]", "available": False}
+
+    try:
+        from . import gee_service
+
+        result = await asyncio.to_thread(
+            gee_service.analyze_vegetation_region,
+            bbox=req.bbox,
+            days=max(1, min(req.days, 120)),
+        )
+
+        return {"available": True, **result}
+
+    except Exception as e:
+        return {"available": False, "error": str(e)}
+
+
+@app.get("/api/gee/proxy-thumb")
+async def proxy_gee_thumb(url: str = Query(...)):
+    """
+    Proxy para thumbnails do GEE. Evita problemas de CORS e URLs expiradas.
+    O backend baixa a imagem (streaming, sem armazenar em RAM) e repassa ao frontend.
+    """
+    if not url.startswith("https://earthengine.googleapis.com/"):
+        return Response(status_code=400, content="URL invalida")
+
+    try:
+        resp = await asyncio.to_thread(
+            http_requests.get, url, timeout=120, stream=True
+        )
+        if resp.status_code != 200:
+            return Response(status_code=resp.status_code, content="Erro ao buscar thumb do GEE")
+
+        return Response(
+            content=resp.content,
+            media_type=resp.headers.get("content-type", "image/png"),
+            headers={"Cache-Control": "public, max-age=300"},
+        )
+    except Exception as e:
+        return Response(status_code=502, content=str(e))
+
+
+@app.get("/api/gee/status")
+async def gee_status():
+    """Verifica se o GEE esta inicializado e disponivel."""
+    return {"available": _gee_available}
+
+
+# ==================== STATIC FILES ====================
 
 # Serve o frontend estático
 # Workdir no container é /app, static montado em /app/static

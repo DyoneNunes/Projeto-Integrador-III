@@ -40,6 +40,7 @@ CREATE TABLE TenantQuota (
     CONSTRAINT unique_tenant_period UNIQUE (tenant_id, effective_from)
 );
 
+
 -- -----------------------------------------------------------------------------
 -- TABELA: ClusterNode (Servidores Físicos/VPS que provêem a RAM)
 -- -----------------------------------------------------------------------------

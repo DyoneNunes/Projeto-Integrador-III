@@ -34,7 +34,7 @@ services:
       - .env
     volumes:
       - /dev/shm:/dev/shm
-      - ../proto:/app/proto:ro
+      - ./proto:/app/proto:ro
       - ./src:/app/src
     networks:
       - default
@@ -54,7 +54,7 @@ services:
       - .env
     volumes:
       - /dev/shm:/dev/shm
-      - ../proto:/app/proto:ro
+      - ./proto:/app/proto:ro
       - ./src:/app/src
     networks:
       - maas-network
@@ -73,7 +73,7 @@ services:
       - .env
     volumes:
       - /dev/shm:/dev/shm
-      - ../proto:/app/proto:ro
+      - ./proto:/app/proto:ro
       - ./src:/app/src
       - ./models:/app/models:ro
     networks:
@@ -90,9 +90,10 @@ services:
     env_file:
       - .env
     volumes:
-      - ../proto:/app/proto:ro
+      - ./proto:/app/proto:ro
       - ./src:/app/src
       - ./static:/app/static:ro
+      - ./credentials:/app/credentials:ro
     ports:
       - "8000:8000"
     networks:

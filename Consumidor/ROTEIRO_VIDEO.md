@@ -52,8 +52,12 @@
 ## PARTE 2 — Sentinela Ambiental (Consumidor)
 
 ### 6. Introducao ao Sentinela (30s)
-- Apresentar o projeto: monitoramento de anomalias termicas (incendios florestais e focos de calor)
-- Dados: NASA FIRMS (satelite VIIRS) — cobertura global multi-regiao
+- Apresentar o projeto: monitoramento de anomalias termicas (incendios florestais, focos de calor, congelamento florestao e focos de baixa temperatura)
+- Dados: NASA FIRMS (satelite VIIRS) — cobertura global multi-regiao 
+         Implementando: Copernicus Data Space Ecosystem API = Para monitoramento ambiental da temperatura da superfície terrestre.
+         NOAA (National Oceanic and Atmospheric Administration) = Para monitoramento dos mares oceanicos.
+         USGS - EarthExplorer (Machine-to-Machine API) = monitoramento do calor retido no solo e nas estruturas.
+         
 - Impacto social: apoio a Defesa Civil e Corpo de Bombeiros
 - Consumidor real do MaaS — utiliza memoria compartilhada para processar dados em tempo real
 

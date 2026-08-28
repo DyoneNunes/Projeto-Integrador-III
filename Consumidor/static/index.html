@@ -92,24 +92,110 @@
         </div>
     </div>
 
-    <!-- KPIs (bottom-left) -->
-    <div class="overlay bottom-0 left-0 p-4">
-        <div class="panel rounded-xl px-6 py-4 flex gap-6">
-            <div class="text-center">
-                <div class="text-gray-400 text-xs uppercase tracking-wider">Focos Filtrados</div>
-                <div id="kpi-total" class="text-white text-2xl font-bold kpi-value">--</div>
+    <!-- KPIs + Temp Card (bottom-left, empilhados dinamicamente) -->
+    <div class="overlay bottom-0 left-0 p-4" style="pointer-events: none;">
+        <div class="flex flex-col gap-3 items-start" style="pointer-events: auto;">
+            <!-- Card Temperatura da Regiao (GEE) -->
+            <div id="temp-card" class="hidden">
+                <div class="panel rounded-xl px-5 py-4" style="min-width: 300px; border-color: rgba(168, 85, 247, 0.25);">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <div class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></div>
+                            <span class="text-purple-300 text-xs font-semibold uppercase tracking-wider">Temperatura do Solo</span>
+                        </div>
+                        <span id="temp-card-region" class="text-gray-500 text-xs">--</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3 mb-3">
+                        <div class="text-center">
+                            <div class="text-gray-500 text-[10px] uppercase">Media</div>
+                            <div id="tc-mean" class="text-yellow-300 text-xl font-bold kpi-value">--</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-gray-500 text-[10px] uppercase">Maxima</div>
+                            <div id="tc-max" class="text-red-400 text-xl font-bold kpi-value">--</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-gray-500 text-[10px] uppercase">Minima</div>
+                            <div id="tc-min" class="text-cyan-400 text-xl font-bold kpi-value">--</div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3 border-t border-gray-700/50 pt-2">
+                        <div class="text-center">
+                            <div class="text-gray-500 text-[10px] uppercase">Anomalia</div>
+                            <div id="tc-anomaly" class="text-orange-400 text-sm font-bold kpi-value">--</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-gray-500 text-[10px] uppercase">Hotspots</div>
+                            <div id="tc-hotspot" class="text-red-500 text-sm font-bold kpi-value">--</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-gray-500 text-[10px] uppercase">Imagens</div>
+                            <div id="tc-images" class="text-gray-300 text-sm font-mono kpi-value">--</div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="text-center">
-                <div class="text-gray-400 text-xs uppercase tracking-wider">Criticos</div>
-                <div id="kpi-critical" class="text-red-400 text-2xl font-bold kpi-value">--</div>
+            <!-- Card Vegetacao NDVI (GEE) -->
+            <div id="ndvi-card" class="hidden">
+                <div class="panel rounded-xl px-5 py-4" style="min-width: 300px; border-color: rgba(34, 197, 94, 0.25);">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                            <span class="text-green-300 text-xs font-semibold uppercase tracking-wider">Saude da Vegetacao (NDVI)</span>
+                        </div>
+                        <span id="ndvi-card-region" class="text-gray-500 text-xs">--</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3 mb-3">
+                        <div class="text-center">
+                            <div class="text-gray-500 text-[10px] uppercase">NDVI Medio</div>
+                            <div id="nc-mean" class="text-green-300 text-xl font-bold kpi-value">--</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-gray-500 text-[10px] uppercase">NDVI Max</div>
+                            <div id="nc-max" class="text-emerald-400 text-xl font-bold kpi-value">--</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-gray-500 text-[10px] uppercase">NDVI Min</div>
+                            <div id="nc-min" class="text-yellow-400 text-xl font-bold kpi-value">--</div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3 border-t border-gray-700/50 pt-2">
+                        <div class="text-center">
+                            <div class="text-gray-500 text-[10px] uppercase">Saudavel</div>
+                            <div id="nc-healthy" class="text-green-400 text-sm font-bold kpi-value">--</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-gray-500 text-[10px] uppercase">Estressada</div>
+                            <div id="nc-stressed" class="text-orange-400 text-sm font-bold kpi-value">--</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-gray-500 text-[10px] uppercase">Imagens</div>
+                            <div id="nc-images" class="text-gray-300 text-sm font-mono kpi-value">--</div>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-[10px] text-gray-500 leading-tight border-t border-gray-700/50 pt-2">
+                        NDVI ~1 = floresta saudavel | NDVI ~0 = solo nu | NDVI &lt;0 = agua/nuvem
+                    </div>
+                </div>
             </div>
-            <div class="text-center">
-                <div class="text-gray-400 text-xs uppercase tracking-wider">Pico FRP</div>
-                <div id="kpi-frp" class="text-orange-400 text-2xl font-bold kpi-value">--</div>
-            </div>
-            <div class="text-center">
-                <div class="text-gray-400 text-xs uppercase tracking-wider">Confianca Media</div>
-                <div id="kpi-conf" class="text-emerald-400 text-2xl font-bold kpi-value">--</div>
+            <!-- KPIs -->
+            <div class="panel rounded-xl px-6 py-4 flex gap-6">
+                <div class="text-center">
+                    <div class="text-gray-400 text-xs uppercase tracking-wider">Focos Filtrados</div>
+                    <div id="kpi-total" class="text-white text-2xl font-bold kpi-value">--</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-gray-400 text-xs uppercase tracking-wider">Criticos</div>
+                    <div id="kpi-critical" class="text-red-400 text-2xl font-bold kpi-value">--</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-gray-400 text-xs uppercase tracking-wider">Pico FRP</div>
+                    <div id="kpi-frp" class="text-orange-400 text-2xl font-bold kpi-value">--</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-gray-400 text-xs uppercase tracking-wider">Confianca Media</div>
+                    <div id="kpi-conf" class="text-emerald-400 text-2xl font-bold kpi-value">--</div>
+                </div>
             </div>
         </div>
     </div>
@@ -216,6 +302,174 @@
                 <input type="range" id="slider-hex-radius" min="3" max="12" value="6" step="1">
             </div>
 
+            <!-- Camada GEE -->
+            <div>
+                <label class="text-gray-400 text-xs uppercase tracking-wider block mb-3">Camada Satelite (GEE)</label>
+                <div class="space-y-2">
+                    <label class="flex items-center gap-3 cursor-pointer group">
+                        <input type="checkbox" id="cb-gee-layer" class="cb-custom w-4 h-4 rounded">
+                        <span class="text-purple-400 text-sm group-hover:text-purple-300">Ativar Camada Satelite</span>
+                    </label>
+                </div>
+                <div id="gee-controls" class="mt-3 space-y-2 hidden">
+                    <!-- Seletor de camada: Termica vs Vegetacao -->
+                    <div class="space-y-1.5">
+                        <div class="text-gray-500 text-[10px] uppercase tracking-wider">Tipo de Camada</div>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="gee-layer-type" value="thermal" checked class="cb-custom w-3.5 h-3.5">
+                            <span class="text-orange-400 text-xs">Temperatura de Superficie (MODIS/Landsat)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="gee-layer-type" value="vegetation" class="cb-custom w-3.5 h-3.5">
+                            <span class="text-green-400 text-xs">Saude da Vegetacao (Landsat/NDVI)</span>
+                        </label>
+                    </div>
+                    <!-- Dataset (visivel apenas para camada termica) -->
+                    <div id="thermal-dataset-wrapper">
+                        <select id="gee-dataset" class="w-full bg-gray-800/60 text-white text-sm border border-gray-600/40 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500/50">
+                            <option value="modis" selected>MODIS LST (1km)</option>
+                            <option value="landsat">Landsat 9 (~100m)</option>
+                        </select>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <label class="text-gray-500 text-xs">Opacidade</label>
+                        <span id="gee-opacity-value" class="text-purple-400 text-xs font-mono font-bold">60%</span>
+                    </div>
+                    <input type="range" id="slider-gee-opacity" min="10" max="100" value="60" step="5" style="accent-color: #a855f7;">
+                    <div id="gee-status" class="text-xs text-gray-500"></div>
+                    <!-- Legenda LST (termica) -->
+                    <div id="gee-legend" class="hidden">
+                        <div id="gee-legend-title" class="text-gray-500 text-[10px] uppercase tracking-wider mb-1">Legenda LST</div>
+                        <div id="gee-legend-bar" class="h-2 rounded-full" style="background: linear-gradient(to right, #0000FF, #0055FF, #00AAFF, #00FFFF, #00FF55, #AAFF00, #FFFF00, #FFAA00, #FF5500, #FF0000, #CC0000);"></div>
+                        <div class="flex justify-between text-[10px] text-gray-500 mt-0.5">
+                            <span id="legend-min">-23C (250K)</span>
+                            <span id="legend-max">57C (330K)</span>
+                        </div>
+                    </div>
+                    <!-- Legenda NDVI (vegetacao) -->
+                    <div id="ndvi-legend" class="hidden">
+                        <div class="text-gray-500 text-[10px] uppercase tracking-wider mb-1">Legenda NDVI</div>
+                        <div class="h-2 rounded-full" style="background: linear-gradient(to right, #8B4513, #A0522D, #CD853F, #D2B48C, #DAA520, #F0E68C, #ADFF2F, #7CFC00, #32CD32, #228B22, #006400, #003300);"></div>
+                        <div class="flex justify-between text-[10px] text-gray-500 mt-0.5">
+                            <span>-0.2 (Solo/Agua)</span>
+                            <span>0.9 (Floresta Densa)</span>
+                        </div>
+                        <div class="mt-1 text-[10px] text-gray-500 leading-tight">
+                            Valores proximos a 1 = vegetacao saudavel<br>
+                            Valores baixos/negativos = seca, solo nu ou agua
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analise Regional GEE -->
+            <div class="border-t border-gray-700/50 pt-4">
+                <label class="text-gray-400 text-xs uppercase tracking-wider block mb-3">Analise Regional (GEE)</label>
+                <div class="space-y-2">
+                    <select id="analysis-mode" class="w-full bg-gray-800/60 text-white text-sm border border-gray-600/40 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500/50">
+                        <option value="lst" selected>Temperatura LST</option>
+                        <option value="anomaly">Anomalia Termica</option>
+                        <option value="vegetation">Saude da Vegetacao (NDVI)</option>
+                    </select>
+                    <button id="btn-analyze" class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-medium border border-purple-500/30" style="background: linear-gradient(135deg, #4c1d95, #2e1065); transition: all 0.2s ease;">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                        </svg>
+                        Analisar Regiao
+                    </button>
+                    <div id="analysis-status" class="text-xs text-gray-500"></div>
+                </div>
+
+                <!-- Painel de Estatisticas GEE -->
+                <div id="analysis-stats" class="mt-3 hidden">
+                    <div class="text-gray-500 text-[10px] uppercase tracking-wider mb-2">Estatisticas (processado no Google)</div>
+                    <div class="space-y-1.5 text-xs">
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">Temp. Media</span>
+                            <span id="stat-mean" class="text-yellow-300 font-mono font-bold">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">Temp. Maxima</span>
+                            <span id="stat-max" class="text-red-400 font-mono font-bold">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">Temp. Minima</span>
+                            <span id="stat-min" class="text-cyan-400 font-mono font-bold">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">Desvio Padrao</span>
+                            <span id="stat-stddev" class="text-gray-300 font-mono font-bold">--</span>
+                        </div>
+                        <div class="flex justify-between border-t border-gray-700/50 pt-1.5">
+                            <span class="text-gray-500">Anomalia Media</span>
+                            <span id="stat-anom-mean" class="text-orange-400 font-mono font-bold">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">Anomalia Max</span>
+                            <span id="stat-anom-max" class="text-red-400 font-mono font-bold">--</span>
+                        </div>
+                        <div class="flex justify-between border-t border-gray-700/50 pt-1.5">
+                            <span class="text-gray-500">Hotspots (>330K)</span>
+                            <span id="stat-hotspot" class="text-red-500 font-mono font-bold">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">Imagens</span>
+                            <span id="stat-images" class="text-gray-300 font-mono">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">Baseline</span>
+                            <span id="stat-baseline" class="text-gray-400 font-mono text-[10px]">--</span>
+                        </div>
+                    </div>
+
+                    <!-- Legenda Anomalia -->
+                    <div id="anomaly-legend" class="mt-2 hidden">
+                        <div class="text-gray-500 text-[10px] uppercase tracking-wider mb-1">Anomalia Termica</div>
+                        <div class="h-2 rounded-full" style="background: linear-gradient(to right, #0000CC, #0088FF, #AAFFAA, #FFFFFF, #FFCC00, #FF4400, #AA0000);"></div>
+                        <div class="flex justify-between text-[10px] text-gray-500 mt-0.5">
+                            <span>-10K (frio)</span>
+                            <span>0K</span>
+                            <span>+10K (quente)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Painel de Estatisticas NDVI -->
+                <div id="analysis-ndvi-stats" class="mt-3 hidden">
+                    <div class="text-gray-500 text-[10px] uppercase tracking-wider mb-2">Vegetacao NDVI (processado no Google)</div>
+                    <div class="space-y-1.5 text-xs">
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">NDVI Medio</span>
+                            <span id="stat-ndvi-mean" class="text-green-300 font-mono font-bold">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">NDVI Maximo</span>
+                            <span id="stat-ndvi-max" class="text-emerald-400 font-mono font-bold">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">NDVI Minimo</span>
+                            <span id="stat-ndvi-min" class="text-yellow-400 font-mono font-bold">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">Desvio Padrao</span>
+                            <span id="stat-ndvi-stddev" class="text-gray-300 font-mono font-bold">--</span>
+                        </div>
+                        <div class="flex justify-between border-t border-gray-700/50 pt-1.5">
+                            <span class="text-gray-500">Veg. Saudavel (&gt;0.4)</span>
+                            <span id="stat-ndvi-healthy" class="text-green-400 font-mono font-bold">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">Veg. Estressada (&lt;0.2)</span>
+                            <span id="stat-ndvi-stressed" class="text-orange-400 font-mono font-bold">--</span>
+                        </div>
+                        <div class="flex justify-between border-t border-gray-700/50 pt-1.5">
+                            <span class="text-gray-500">Imagens</span>
+                            <span id="stat-ndvi-images" class="text-gray-300 font-mono">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Info -->
             <div class="border-t border-gray-700/50 pt-4">
                 <p class="text-gray-500 text-xs leading-relaxed">
@@ -248,6 +502,8 @@
         // ========== ESTADO GLOBAL ==========
         let rawData = [];
         let filteredData = [];
+        let lastThermalAnalysis = null;   // resultado da analise termica GEE
+        let lastNdviAnalysis = null;      // resultado da analise vegetacao NDVI
 
         // ========== ELEMENTOS DOM ==========
         const tooltip = document.getElementById('tooltip');
@@ -577,7 +833,78 @@
             doc.text(`Confianca Media: ${avgConf.toFixed(1)}%`, 14, yPos); yPos += 5;
             doc.text(`Janela Temporal: ${document.getElementById('hours-filter').value}h`, 14, yPos); yPos += 10;
 
+            const pageHeight = doc.internal.pageSize.getHeight();
+            function checkPageBreak(needed) {
+                if (yPos + needed > pageHeight - 20) {
+                    doc.addPage();
+                    yPos = 20;
+                }
+            }
+
+            // --- Analise Termica GEE (se disponivel) ---
+            if (lastThermalAnalysis) {
+                checkPageBreak(70);
+                const t = lastThermalAnalysis.statistics;
+                doc.setFontSize(11);
+                doc.setFont('helvetica', 'bold');
+                doc.text(`Analise Termica Regional (GEE) - ${lastThermalAnalysis.region}`, 14, yPos);
+                yPos += 7;
+
+                doc.setFontSize(9);
+                doc.setFont('helvetica', 'normal');
+                doc.text(`Temperatura Media: ${t.temp_media_c} C (${t.temp_media_k} K)`, 14, yPos); yPos += 5;
+                doc.text(`Temperatura Maxima: ${t.temp_max_c} C (${t.temp_max_k} K)`, 14, yPos); yPos += 5;
+                doc.text(`Temperatura Minima: ${t.temp_min_c} C (${t.temp_min_k} K)`, 14, yPos); yPos += 5;
+                doc.text(`Desvio Padrao: ${t.temp_stddev_k} K`, 14, yPos); yPos += 5;
+                doc.text(`Anomalia Media: ${t.anomalia_media_k >= 0 ? '+' : ''}${t.anomalia_media_k} K`, 14, yPos); yPos += 5;
+                doc.text(`Anomalia Maxima: ${t.anomalia_max_k >= 0 ? '+' : ''}${t.anomalia_max_k} K`, 14, yPos); yPos += 5;
+                doc.text(`Hotspots (>330K): ${t.hotspot_pct}% (${t.hotspot_pixels} pixels de ${t.total_pixels})`, 14, yPos); yPos += 5;
+                doc.text(`Imagens processadas: ${lastThermalAnalysis.images} (${lastThermalAnalysis.period} dias)`, 14, yPos); yPos += 5;
+                doc.text(`Baseline: ${lastThermalAnalysis.baseline}`, 14, yPos); yPos += 5;
+                doc.setFontSize(7);
+                doc.setTextColor(100);
+                doc.text('Dados: MODIS/061/MOD11A1 (1km) - Processamento no Google Earth Engine (MaaS)', 14, yPos);
+                doc.setTextColor(0);
+                yPos += 8;
+            }
+
+            // --- Analise de Vegetacao NDVI (se disponivel) ---
+            if (lastNdviAnalysis) {
+                checkPageBreak(70);
+                const v = lastNdviAnalysis.statistics;
+                doc.setFontSize(11);
+                doc.setFont('helvetica', 'bold');
+                doc.text(`Saude da Vegetacao - NDVI (GEE) - ${lastNdviAnalysis.region}`, 14, yPos);
+                yPos += 7;
+
+                doc.setFontSize(9);
+                doc.setFont('helvetica', 'normal');
+                doc.text(`NDVI Medio: ${v.ndvi_media.toFixed(4)}`, 14, yPos); yPos += 5;
+                doc.text(`NDVI Maximo: ${v.ndvi_max.toFixed(4)}`, 14, yPos); yPos += 5;
+                doc.text(`NDVI Minimo: ${v.ndvi_min.toFixed(4)}`, 14, yPos); yPos += 5;
+                doc.text(`Desvio Padrao: ${v.ndvi_stddev.toFixed(4)}`, 14, yPos); yPos += 5;
+                doc.text(`Vegetacao Saudavel (NDVI > 0.4): ${v.vegetacao_saudavel_pct}% (${v.healthy_pixels} pixels)`, 14, yPos); yPos += 5;
+                doc.text(`Vegetacao Estressada (NDVI < 0.2): ${v.vegetacao_estressada_pct}% (${v.stressed_pixels} pixels)`, 14, yPos); yPos += 5;
+                doc.text(`Total de pixels analisados: ${v.total_pixels}`, 14, yPos); yPos += 5;
+                doc.text(`Imagens processadas: ${lastNdviAnalysis.images} (${lastNdviAnalysis.period} dias)`, 14, yPos); yPos += 5;
+                doc.setFontSize(7);
+                doc.setTextColor(100);
+                doc.text('Dados: USGS Landsat 8 (30m) - NDVI = normalizedDifference(B5, B4) - Processamento no Google Earth Engine (MaaS)', 14, yPos);
+                doc.setTextColor(0);
+                yPos += 5;
+
+                // Escala interpretativa NDVI
+                doc.setFontSize(8);
+                doc.setFont('helvetica', 'italic');
+                doc.setTextColor(80);
+                doc.text('Escala NDVI: ~1.0 = floresta densa saudavel | 0.2-0.4 = vegetacao esparsa | <0.2 = solo nu/seca | <0 = agua/nuvem', 14, yPos);
+                doc.setTextColor(0);
+                doc.setFont('helvetica', 'normal');
+                yPos += 8;
+            }
+
             // Tabela com top 100 focos criticos (ordenados por FRP desc)
+            checkPageBreak(30);
             doc.setFontSize(11);
             doc.setFont('helvetica', 'bold');
             doc.text('Top 100 Focos (por FRP)', 14, yPos);
@@ -650,6 +977,11 @@
             const view = REGION_VIEWS[e.target.value];
             globe.pointOfView(view, 1000);
             applyFilters();
+            // Recarrega camada GEE e dispara analise automatica da regiao
+            if (cbGeeLayer.checked) {
+                loadGeeLayer();
+                runRegionalAnalysis();
+            }
         });
 
         // ========== FETCH DE DADOS ==========
@@ -676,6 +1008,489 @@
         window.addEventListener('resize', () => {
             globe.width(window.innerWidth);
             globe.height(window.innerHeight);
+        });
+
+        // ========== BBOXES REGIONAIS (GEE format: [west, south, east, north]) ==========
+        const REGION_BBOXES = {
+            global:        [-180, -60, 180, 75],
+            south_america: [-82, -56, -34, 13],
+            north_america: [-170, 15, -50, 72],
+            africa:        [-18, -35, 52, 37],
+            europe:        [-12, 35, 45, 72],
+            asia:          [45, 0, 180, 75],
+            oceania:       [100, -50, 180, 5],
+        };
+
+        // ========== CAMADA GEE (OVERLAY TERMICA SATELITE) ==========
+        let geeOverlayMesh = null;
+        let geeLoading = false;
+
+        const cbGeeLayer = document.getElementById('cb-gee-layer');
+        const geeControls = document.getElementById('gee-controls');
+        const geeStatus = document.getElementById('gee-status');
+        const geeLegend = document.getElementById('gee-legend');
+        const ndviLegend = document.getElementById('ndvi-legend');
+        const sliderGeeOpacity = document.getElementById('slider-gee-opacity');
+        const geeOpacityValue = document.getElementById('gee-opacity-value');
+        const geeDataset = document.getElementById('gee-dataset');
+        const thermalDatasetWrapper = document.getElementById('thermal-dataset-wrapper');
+        const geeLayerTypeRadios = document.querySelectorAll('input[name="gee-layer-type"]');
+
+        function getSelectedLayerType() {
+            const checked = document.querySelector('input[name="gee-layer-type"]:checked');
+            return checked ? checked.value : 'thermal';
+        }
+
+        function removeGeeOverlay() {
+            if (geeOverlayMesh) {
+                globe.scene().remove(geeOverlayMesh);
+                if (geeOverlayMesh.material.map) geeOverlayMesh.material.map.dispose();
+                geeOverlayMesh.material.dispose();
+                geeOverlayMesh.geometry.dispose();
+                geeOverlayMesh = null;
+            }
+        }
+
+        function applyGeeTexture(thumbUrl, statusMsg) {
+            // Usa proxy local para evitar CORS e URLs expiradas do GEE
+            const proxiedUrl = `/api/gee/proxy-thumb?url=${encodeURIComponent(thumbUrl)}`;
+            const loader = new THREE.TextureLoader();
+            loader.load(
+                proxiedUrl,
+                (texture) => {
+                    removeGeeOverlay();
+                    const globeRadius = globe.getGlobeRadius();
+                    const overlayRadius = globeRadius * 1.002;
+                    const geometry = new THREE.SphereGeometry(overlayRadius, 96, 48);
+                    const material = new THREE.MeshBasicMaterial({
+                        map: texture,
+                        transparent: true,
+                        opacity: parseInt(sliderGeeOpacity.value) / 100,
+                        side: THREE.FrontSide,
+                        depthWrite: false,
+                    });
+                    geeOverlayMesh = new THREE.Mesh(geometry, material);
+                    geeOverlayMesh.rotation.y = -Math.PI / 2;
+                    globe.scene().add(geeOverlayMesh);
+
+                    geeStatus.textContent = statusMsg;
+                    geeStatus.className = 'text-xs text-green-400';
+                    geeLegend.classList.remove('hidden');
+                    geeLoading = false;
+                },
+                undefined,
+                (err) => {
+                    console.error('Erro ao carregar textura GEE:', err);
+                    geeStatus.textContent = 'Erro ao carregar textura';
+                    geeStatus.className = 'text-xs text-red-400';
+                    geeLoading = false;
+                }
+            );
+        }
+
+        async function loadGeeLayer() {
+            if (geeLoading) return;
+            geeLoading = true;
+
+            const layerType = getSelectedLayerType();
+
+            if (layerType === 'vegetation') {
+                await loadVegetationLayer();
+                return;
+            }
+
+            // Camada termica (fluxo original)
+            const dataset = geeDataset.value;
+            if (dataset === 'landsat') {
+                geeStatus.textContent = 'Processando Landsat (pode levar 15-30s)...';
+            } else {
+                geeStatus.textContent = 'Carregando camada GEE...';
+            }
+            geeStatus.className = 'text-xs text-yellow-400 animate-pulse';
+
+            const hours = document.getElementById('hours-filter').value;
+            const days = Math.max(Math.ceil(parseInt(hours) / 24), 1);
+
+            try {
+                // Landsat precisa de bbox regional (100m e pesado demais para global)
+                let url = `/api/gee/camada-termica?dataset=${dataset}&days=${days}`;
+                if (dataset === 'landsat') {
+                    const regionKey = document.getElementById('region-filter').value;
+                    const bbox = REGION_BBOXES[regionKey] || REGION_BBOXES.global;
+                    url += `&bbox=${bbox.join(',')}`;
+                }
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (!data.available) {
+                    geeStatus.textContent = data.error || 'GEE indisponivel';
+                    geeStatus.className = 'text-xs text-red-400';
+                    geeLoading = false;
+                    return;
+                }
+
+                if (!data.thumb_url) {
+                    geeStatus.textContent = 'Landsat: selecione uma regiao especifica para visualizar';
+                    geeStatus.className = 'text-xs text-yellow-400';
+                    geeLoading = false;
+                    return;
+                }
+
+                // Mostra legenda termica, esconde NDVI
+                geeLegend.classList.remove('hidden');
+                ndviLegend.classList.add('hidden');
+
+                const desc = data.vis ? data.vis.description : dataset;
+                applyGeeTexture(data.thumb_url, `${desc} (${data.images_used || '?'} imagens)`);
+            } catch (err) {
+                console.error('Erro na API GEE:', err);
+                geeStatus.textContent = 'Erro de conexao com API GEE';
+                geeStatus.className = 'text-xs text-red-400';
+                geeLoading = false;
+            }
+        }
+
+        async function loadVegetationLayer() {
+            geeStatus.textContent = 'Processando NDVI Landsat 8 (pode levar 15-30s)...';
+            geeStatus.className = 'text-xs text-yellow-400 animate-pulse';
+
+            const regionKey = document.getElementById('region-filter').value;
+            const bbox = REGION_BBOXES[regionKey] || REGION_BBOXES.global;
+            const regionName = document.getElementById('region-filter').selectedOptions[0].text;
+
+            try {
+                const res = await fetch('/api/gee/analise/vegetacao', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bbox, days: 30 }),
+                });
+                const data = await res.json();
+
+                if (!data.available) {
+                    geeStatus.textContent = data.error || 'GEE indisponivel';
+                    geeStatus.className = 'text-xs text-red-400';
+                    geeLoading = false;
+                    return;
+                }
+
+                // Armazena resultado para exportacao PDF
+                if (data.statistics) {
+                    lastNdviAnalysis = { statistics: data.statistics, region: regionName, images: data.images_used, period: data.period_days };
+                }
+
+                // Atualiza card NDVI flutuante
+                if (data.statistics) {
+                    const s = data.statistics;
+                    document.getElementById('nc-mean').textContent = s.ndvi_media.toFixed(3);
+                    document.getElementById('nc-max').textContent = s.ndvi_max.toFixed(3);
+                    document.getElementById('nc-min').textContent = s.ndvi_min.toFixed(3);
+                    document.getElementById('nc-healthy').textContent = s.vegetacao_saudavel_pct + '%';
+                    document.getElementById('nc-stressed').textContent = s.vegetacao_estressada_pct + '%';
+                    document.getElementById('nc-images').textContent = data.images_used;
+                    document.getElementById('ndvi-card-region').textContent = regionName;
+
+                    // Coloriza NDVI medio
+                    const meanEl = document.getElementById('nc-mean');
+                    if (s.ndvi_media > 0.5) {
+                        meanEl.className = 'text-green-400 text-xl font-bold kpi-value';
+                    } else if (s.ndvi_media > 0.2) {
+                        meanEl.className = 'text-yellow-300 text-xl font-bold kpi-value';
+                    } else {
+                        meanEl.className = 'text-orange-400 text-xl font-bold kpi-value';
+                    }
+
+                    document.getElementById('ndvi-card').classList.remove('hidden');
+                    document.getElementById('temp-card').classList.add('hidden');
+                }
+
+                // Mostra legenda NDVI, esconde termica
+                ndviLegend.classList.remove('hidden');
+                geeLegend.classList.add('hidden');
+
+                if (data.thumb_url) {
+                    const desc = data.vis ? data.vis.description : 'NDVI';
+                    applyGeeTexture(data.thumb_url, `${desc} - ${regionName} (${data.images_used} imgs)`);
+                } else {
+                    geeStatus.textContent = 'NDVI carregado (sem thumb para regiao global)';
+                    geeStatus.className = 'text-xs text-yellow-400';
+                    geeLoading = false;
+                }
+            } catch (err) {
+                console.error('Erro na API GEE Vegetacao:', err);
+                geeStatus.textContent = 'Erro de conexao com API GEE';
+                geeStatus.className = 'text-xs text-red-400';
+                geeLoading = false;
+            }
+        }
+
+        // Toggle da camada GEE
+        cbGeeLayer.addEventListener('change', () => {
+            if (cbGeeLayer.checked) {
+                geeControls.classList.remove('hidden');
+                updateLayerTypeUI();
+                loadGeeLayer();
+            } else {
+                geeControls.classList.add('hidden');
+                geeLegend.classList.add('hidden');
+                ndviLegend.classList.add('hidden');
+                removeGeeOverlay();
+                geeStatus.textContent = '';
+                document.getElementById('temp-card').classList.add('hidden');
+                document.getElementById('ndvi-card').classList.add('hidden');
+            }
+        });
+
+        // Opacidade do overlay GEE
+        sliderGeeOpacity.addEventListener('input', () => {
+            const val = parseInt(sliderGeeOpacity.value);
+            geeOpacityValue.textContent = val + '%';
+            if (geeOverlayMesh) {
+                geeOverlayMesh.material.opacity = val / 100;
+            }
+        });
+
+        // Atualiza UI conforme tipo de camada selecionado
+        function updateLayerTypeUI() {
+            const layerType = getSelectedLayerType();
+            if (layerType === 'vegetation') {
+                thermalDatasetWrapper.classList.add('hidden');
+                geeLegend.classList.add('hidden');
+            } else {
+                thermalDatasetWrapper.classList.remove('hidden');
+                ndviLegend.classList.add('hidden');
+            }
+        }
+
+        // Troca entre camada termica e vegetacao
+        geeLayerTypeRadios.forEach(radio => {
+            radio.addEventListener('change', () => {
+                updateLayerTypeUI();
+                // Esconde cards da camada anterior
+                document.getElementById('temp-card').classList.add('hidden');
+                document.getElementById('ndvi-card').classList.add('hidden');
+                if (cbGeeLayer.checked) loadGeeLayer();
+            });
+        });
+
+        // Recarrega ao trocar dataset + atualiza legenda
+        geeDataset.addEventListener('change', () => {
+            if (geeDataset.value === 'landsat') {
+                document.getElementById('legend-min').textContent = '-3C (270K)';
+                document.getElementById('legend-max').textContent = '47C (320K)';
+            } else {
+                document.getElementById('legend-min').textContent = '-23C (250K)';
+                document.getElementById('legend-max').textContent = '57C (330K)';
+            }
+            if (cbGeeLayer.checked) loadGeeLayer();
+        });
+
+        // ========== ANALISE REGIONAL GEE (MaaS: processamento no Google) ==========
+        const btnAnalyze = document.getElementById('btn-analyze');
+        const analysisStatus = document.getElementById('analysis-status');
+        const analysisStats = document.getElementById('analysis-stats');
+        const analysisMode = document.getElementById('analysis-mode');
+        const anomalyLegend = document.getElementById('anomaly-legend');
+        let analysisLoading = false;
+
+        function updateStatsPanel(stats) {
+            document.getElementById('stat-mean').textContent = stats.temp_media_c + ' C';
+            document.getElementById('stat-max').textContent = stats.temp_max_c + ' C';
+            document.getElementById('stat-min').textContent = stats.temp_min_c + ' C';
+            document.getElementById('stat-stddev').textContent = stats.temp_stddev_k + ' K';
+            document.getElementById('stat-anom-mean').textContent = (stats.anomalia_media_k >= 0 ? '+' : '') + stats.anomalia_media_k + ' K';
+            document.getElementById('stat-anom-max').textContent = (stats.anomalia_max_k >= 0 ? '+' : '') + stats.anomalia_max_k + ' K';
+            document.getElementById('stat-hotspot').textContent = stats.hotspot_pct + '% (' + stats.hotspot_pixels + ' px)';
+
+            // Coloriza anomalia
+            const anomMean = document.getElementById('stat-anom-mean');
+            anomMean.className = 'font-mono font-bold ' + (stats.anomalia_media_k > 2 ? 'text-red-400' : stats.anomalia_media_k < -2 ? 'text-cyan-400' : 'text-green-400');
+        }
+
+        function updateTempCard(stats, regionName, imgCount) {
+            document.getElementById('tc-mean').textContent = stats.temp_media_c + '\u00B0C';
+            document.getElementById('tc-max').textContent = stats.temp_max_c + '\u00B0C';
+            document.getElementById('tc-min').textContent = stats.temp_min_c + '\u00B0C';
+            const anomVal = stats.anomalia_media_k;
+            const anomEl = document.getElementById('tc-anomaly');
+            anomEl.textContent = (anomVal >= 0 ? '+' : '') + anomVal + 'K';
+            anomEl.className = 'text-sm font-bold kpi-value ' + (anomVal > 2 ? 'text-red-400' : anomVal < -2 ? 'text-cyan-400' : 'text-green-400');
+            document.getElementById('tc-hotspot').textContent = stats.hotspot_pct + '%';
+            document.getElementById('tc-images').textContent = imgCount;
+            document.getElementById('temp-card-region').textContent = regionName;
+            document.getElementById('temp-card').classList.remove('hidden');
+        }
+
+        const analysisNdviStats = document.getElementById('analysis-ndvi-stats');
+
+        function updateNdviStatsPanel(stats) {
+            document.getElementById('stat-ndvi-mean').textContent = stats.ndvi_media.toFixed(3);
+            document.getElementById('stat-ndvi-max').textContent = stats.ndvi_max.toFixed(3);
+            document.getElementById('stat-ndvi-min').textContent = stats.ndvi_min.toFixed(3);
+            document.getElementById('stat-ndvi-stddev').textContent = stats.ndvi_stddev.toFixed(4);
+            document.getElementById('stat-ndvi-healthy').textContent = stats.vegetacao_saudavel_pct + '%';
+            document.getElementById('stat-ndvi-stressed').textContent = stats.vegetacao_estressada_pct + '%';
+
+            // Coloriza NDVI medio
+            const meanEl = document.getElementById('stat-ndvi-mean');
+            if (stats.ndvi_media > 0.5) {
+                meanEl.className = 'text-green-400 font-mono font-bold';
+            } else if (stats.ndvi_media > 0.2) {
+                meanEl.className = 'text-yellow-300 font-mono font-bold';
+            } else {
+                meanEl.className = 'text-orange-400 font-mono font-bold';
+            }
+        }
+
+        function updateNdviCard(stats, regionName, imgCount) {
+            document.getElementById('nc-mean').textContent = stats.ndvi_media.toFixed(3);
+            document.getElementById('nc-max').textContent = stats.ndvi_max.toFixed(3);
+            document.getElementById('nc-min').textContent = stats.ndvi_min.toFixed(3);
+            document.getElementById('nc-healthy').textContent = stats.vegetacao_saudavel_pct + '%';
+            document.getElementById('nc-stressed').textContent = stats.vegetacao_estressada_pct + '%';
+            document.getElementById('nc-images').textContent = imgCount;
+            document.getElementById('ndvi-card-region').textContent = regionName;
+
+            const meanEl = document.getElementById('nc-mean');
+            if (stats.ndvi_media > 0.5) {
+                meanEl.className = 'text-green-400 text-xl font-bold kpi-value';
+            } else if (stats.ndvi_media > 0.2) {
+                meanEl.className = 'text-yellow-300 text-xl font-bold kpi-value';
+            } else {
+                meanEl.className = 'text-orange-400 text-xl font-bold kpi-value';
+            }
+
+            document.getElementById('ndvi-card').classList.remove('hidden');
+            document.getElementById('temp-card').classList.add('hidden');
+        }
+
+        async function runRegionalAnalysis() {
+            if (analysisLoading) return;
+            analysisLoading = true;
+
+            const regionKey = document.getElementById('region-filter').value;
+            const bbox = REGION_BBOXES[regionKey] || REGION_BBOXES.global;
+            const hours = document.getElementById('hours-filter').value;
+            const days = Math.max(Math.ceil(parseInt(hours) / 24), 1);
+            const mode = analysisMode.value;
+
+            analysisStatus.textContent = 'Processando no Google Earth Engine...';
+            analysisStatus.className = 'text-xs text-yellow-400 animate-pulse';
+            btnAnalyze.disabled = true;
+            btnAnalyze.style.opacity = '0.5';
+
+            try {
+                // Modo vegetacao: endpoint diferente
+                if (mode === 'vegetation') {
+                    const res = await fetch('/api/gee/analise/vegetacao', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ bbox, days: 30 }),
+                    });
+                    const data = await res.json();
+
+                    if (!data.available) {
+                        analysisStatus.textContent = data.error || 'Erro na analise';
+                        analysisStatus.className = 'text-xs text-red-400';
+                        analysisLoading = false;
+                        btnAnalyze.disabled = false;
+                        btnAnalyze.style.opacity = '1';
+                        return;
+                    }
+
+                    const regionName = document.getElementById('region-filter').selectedOptions[0].text;
+                    lastNdviAnalysis = { statistics: data.statistics, region: regionName, images: data.images_used, period: data.period_days };
+                    updateNdviStatsPanel(data.statistics);
+                    updateNdviCard(data.statistics, regionName, data.images_used);
+                    document.getElementById('stat-ndvi-images').textContent = data.images_used + ' imgs (' + data.period_days + 'd)';
+                    analysisNdviStats.classList.remove('hidden');
+                    analysisStats.classList.add('hidden');
+                    anomalyLegend.classList.add('hidden');
+                    geeLegend.classList.add('hidden');
+                    ndviLegend.classList.remove('hidden');
+
+                    if (data.thumb_url && cbGeeLayer.checked) {
+                        geeLoading = true;
+                        applyGeeTexture(data.thumb_url, `NDVI - ${regionName} (${data.images_used} imgs)`);
+                    }
+
+                    analysisStatus.textContent = `Analise NDVI concluida - ${regionName}`;
+                    analysisStatus.className = 'text-xs text-green-400';
+
+                } else {
+                    // Modo termico (lst/anomaly - fluxo original)
+                    const res = await fetch('/api/gee/analise/temperatura', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ bbox, days }),
+                    });
+                    const data = await res.json();
+
+                    if (!data.available) {
+                        analysisStatus.textContent = data.error || 'Erro na analise';
+                        analysisStatus.className = 'text-xs text-red-400';
+                        analysisLoading = false;
+                        btnAnalyze.disabled = false;
+                        btnAnalyze.style.opacity = '1';
+                        return;
+                    }
+
+                    const regionName = document.getElementById('region-filter').selectedOptions[0].text;
+                    lastThermalAnalysis = { statistics: data.statistics, region: regionName, images: data.images_used, period: data.period_days, baseline: data.baseline };
+                    updateStatsPanel(data.statistics);
+                    updateTempCard(data.statistics, regionName, data.images_used);
+                    document.getElementById('stat-images').textContent = data.images_used + ' imgs (' + data.period_days + 'd)';
+                    document.getElementById('stat-baseline').textContent = data.baseline;
+                    analysisStats.classList.remove('hidden');
+                    analysisNdviStats.classList.add('hidden');
+                    ndviLegend.classList.add('hidden');
+                    document.getElementById('ndvi-card').classList.add('hidden');
+
+                    if (data.vis) {
+                        document.getElementById('legend-min').textContent = data.vis.min_c + 'C (' + data.vis.min_k + 'K)';
+                        document.getElementById('legend-max').textContent = data.vis.max_c + 'C (' + data.vis.max_k + 'K)';
+                        geeLegend.classList.remove('hidden');
+                    }
+
+                    const isAnomaly = mode === 'anomaly';
+                    const thumbUrl = isAnomaly ? data.thumb_url_anomaly : data.thumb_url;
+
+                    if (thumbUrl && cbGeeLayer.checked) {
+                        geeLoading = true;
+                        const label = isAnomaly ? 'Anomalia' : 'LST';
+                        applyGeeTexture(thumbUrl, `${label} - ${regionName} (${data.images_used} imgs)`);
+                    }
+
+                    if (isAnomaly && data.vis_anomaly) {
+                        const ar = data.vis_anomaly;
+                        document.getElementById('legend-min').textContent = ar.min_k + 'K (frio)';
+                        document.getElementById('legend-max').textContent = '+' + ar.max_k + 'K (quente)';
+                        anomalyLegend.classList.remove('hidden');
+                    } else {
+                        anomalyLegend.classList.add('hidden');
+                    }
+
+                    analysisStatus.textContent = `Analise concluida - ${regionName}`;
+                    analysisStatus.className = 'text-xs text-green-400';
+                }
+
+            } catch (err) {
+                console.error('Erro na analise regional:', err);
+                analysisStatus.textContent = 'Erro de conexao';
+                analysisStatus.className = 'text-xs text-red-400';
+            }
+
+            analysisLoading = false;
+            btnAnalyze.disabled = false;
+            btnAnalyze.style.opacity = '1';
+        }
+
+        btnAnalyze.addEventListener('click', runRegionalAnalysis);
+        // Hover no botao
+        btnAnalyze.addEventListener('mouseenter', () => {
+            if (!btnAnalyze.disabled) btnAnalyze.style.background = 'linear-gradient(135deg, #6d28d9, #4c1d95)';
+        });
+        btnAnalyze.addEventListener('mouseleave', () => {
+            btnAnalyze.style.background = 'linear-gradient(135deg, #4c1d95, #2e1065)';
         });
     })();
     </script>

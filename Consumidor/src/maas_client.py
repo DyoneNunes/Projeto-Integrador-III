@@ -27,7 +27,7 @@ class MaaSMemory:
         """Escreve bytes na memória remota via gRPC WriteMemory."""
         if self.pos + len(data) > self.size:
             raise ValueError("Tentativa de escrita além dos limites da memória.")
-        
+
         request = maas_pb2.WriteRequest(
             allocation_id=self.allocation_id,
             offset=self.pos,
@@ -41,7 +41,7 @@ class MaaSMemory:
         """Lê bytes da memória remota via gRPC ReadMemory."""
         if self.pos + size_bytes > self.size:
             size_bytes = self.size - self.pos # Lê até o final
-        
+
         if size_bytes <= 0:
             return b""
 
